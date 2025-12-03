@@ -1,0 +1,450 @@
+import streamlit as st
+import sqlite3
+import pandas as pd
+
+# Page configuration
+st.set_page_config(page_title="מחשבון תזונתי", page_icon="🍎", layout="wide")
+
+# Database connection
+@st.cache_resource
+def get_connection():
+    """Create database connection"""
+    return sqlite3.connect('nutrition.db', check_same_thread=False)
+
+def search_foods(search_term):
+    """Search for foods by name"""
+    conn = get_connection()
+    query = """
+    SELECT Code, shmmitzrach 
+    FROM products 
+    WHERE shmmitzrach LIKE ?
+    ORDER BY shmmitzrach
+    """
+    df = pd.read_sql_query(query, conn, params=(f'%{search_term}%',))
+    return df
+
+def advanced_search(conditions, columns=None):
+    """Advanced search with multiple conditions and individual AND/OR operators"""
+    conn = get_connection()
+    
+    if not conditions:
+        return pd.DataFrame()
+    
+    # Build WHERE clause with individual operators
+    where_parts = []
+    params = []
+    
+    for i, cond in enumerate(conditions):
+        field = cond['field']
+        operator = cond['operator']
+        value = cond['value']
+        
+        # Build condition SQL
+        if operator == 'שווה' or operator == '=':
+            condition_sql = f"{field} = ?"
+            params.append(value)
+        elif operator == 'גדול מ' or operator == '>':
+            condition_sql = f"{field} > ?"
+            params.append(value)
+        elif operator == 'קטן מ' or operator == '<':
+            condition_sql = f"{field} < ?"
+            params.append(value)
+        elif operator == 'גדול שווה' or operator == '>=':
+            condition_sql = f"{field} >= ?"
+            params.append(value)
+        elif operator == 'קטן שווה' or operator == '<=':
+            condition_sql = f"{field} <= ?"
+            params.append(value)
+        elif operator == 'בין':
+            if 'value2' in cond:
+                condition_sql = f"{field} BETWEEN ? AND ?"
+                params.extend([value, cond['value2']])
+            else:
+                continue
+        else:
+            continue
+        
+        # Add to parts with logic operator
+        if i == 0:
+            where_parts.append(condition_sql)
+        else:
+            # Get the logic operator from the previous condition
+            logic_op = conditions[i-1].get('next_operator', 'AND')
+            where_parts.append(f" {logic_op} {condition_sql}")
+    
+    if not where_parts:
+        return pd.DataFrame()
+    
+    # Combine all parts
+    where_clause = "".join(where_parts)
+    
+    # Determine columns to select
+    if columns:
+        # Ensure Code and shmmitzrach are always present
+        cols_to_select = ['Code', 'shmmitzrach'] + [c for c in columns if c not in ['Code', 'shmmitzrach']]
+        select_clause = ", ".join(cols_to_select)
+    else:
+        select_clause = "Code, shmmitzrach, protein, total_fat, carbohydrates, food_energy"
+
+    query = f"""
+    SELECT {select_clause}
+    FROM products 
+    WHERE {where_clause}
+    ORDER BY shmmitzrach
+    """
+    
+    df = pd.read_sql_query(query, conn, params=params)
+    return df
+
+def get_food_details(food_code):
+    """Get nutritional details for a specific food"""
+    conn = get_connection()
+    query = """
+    SELECT * 
+    FROM products 
+    WHERE Code = ?
+    """
+    df = pd.read_sql_query(query, conn, params=(food_code,))
+    return df.iloc[0] if len(df) > 0 else None
+
+def get_available_units(food_code):
+    """Get available units for a specific food"""
+    conn = get_connection()
+    query = """
+    SELECT c.mida, c.mishkal, u.shmmida
+    FROM conversions c
+    JOIN units u ON c.mida = u.smlmida
+    WHERE c.mmitzrach = ?
+    ORDER BY u.shmmida
+    """
+    df = pd.read_sql_query(query, conn, params=(food_code,))
+    return df
+
+def display_all_nutrition(food_data, factor=1.0):
+    """Display all nutritional parameters"""
+    
+    # Main macronutrients
+    st.markdown("### מקרו-נוטריינטים")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("קלוריות (kcal)", f"{float(food_data.get('food_energy', 0) or 0) * factor:.1f}")
+    with col2:
+        st.metric("חלבון (g)", f"{float(food_data.get('protein', 0) or 0) * factor:.1f}")
+    with col3:
+        st.metric("פחמימות (g)", f"{float(food_data.get('carbohydrates', 0) or 0) * factor:.1f}")
+    with col4:
+        st.metric("שומן כולל (g)", f"{float(food_data.get('total_fat', 0) or 0) * factor:.1f}")
+    
+    # Fats breakdown
+    with st.expander("🧈 פירוט שומנים"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"**שומן רווי:** {float(food_data.get('saturated_fat', 0) or 0) * factor:.2f}g")
+            st.write(f"**שומן חד בלתי רווי:** {float(food_data.get('mono_unsaturated_fat', 0) or 0) * factor:.2f}g")
+            st.write(f"**שומן רב בלתי רווי:** {float(food_data.get('poly_unsaturated_fat', 0) or 0) * factor:.2f}g")
+        with col2:
+            st.write(f"**חומצות שומן טרנס:** {float(food_data.get('trans_fatty_acids', 0) or 0) * factor:.2f}g")
+            st.write(f"**כולסטרול:** {float(food_data.get('cholesterol', 0) or 0) * factor:.2f}mg")
+            st.write(f"**אומגה 3 (לינולנית):** {float(food_data.get('linolenic', 0) or 0) * factor:.2f}g")
+        with col3:
+            st.write(f"**אומגה 6 (לינולאית):** {float(food_data.get('linoleic', 0) or 0) * factor:.2f}g")
+            st.write(f"**חומצה אולאית:** {float(food_data.get('oleic', 0) or 0) * factor:.2f}g")
+    
+    # Vitamins
+    with st.expander("💊 ויטמינים"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"**ויטמין A (IU):** {float(food_data.get('vitamin_a_iu', 0) or 0) * factor:.1f}")
+            st.write(f"**ויטמין A (mcg):** {float(food_data.get('vitamin_a_re', 0) or 0) * factor:.1f}")
+            st.write(f"**ויטמין C (mg):** {float(food_data.get('vitamin_c', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין D (mcg):** {float(food_data.get('vitamin_d', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין E (mg):** {float(food_data.get('vitamin_e', 0) or 0) * factor:.2f}")
+        with col2:
+            st.write(f"**ויטמין K (mcg):** {float(food_data.get('vitamin_k', 0) or 0) * factor:.2f}")
+            st.write(f"**תיאמין B1 (mg):** {float(food_data.get('thiamin', 0) or 0) * factor:.2f}")
+            st.write(f"**ריבופלאבין B2 (mg):** {float(food_data.get('riboflavin', 0) or 0) * factor:.2f}")
+            st.write(f"**ניאצין B3 (mg):** {float(food_data.get('niacin', 0) or 0) * factor:.2f}")
+        with col3:
+            st.write(f"**ויטמין B6 (mg):** {float(food_data.get('vitamin_b6', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין B12 (mcg):** {float(food_data.get('vitamin_b12', 0) or 0) * factor:.2f}")
+            st.write(f"**חומצה פולית (mcg):** {float(food_data.get('folate', 0) or 0) * factor:.2f}")
+            st.write(f"**חומצה פנטותנית (mg):** {float(food_data.get('pantothenic_acid', 0) or 0) * factor:.2f}")
+    
+    # Minerals
+    with st.expander("⚗️ מינרלים"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"**סידן (mg):** {float(food_data.get('calcium', 0) or 0) * factor:.1f}")
+            st.write(f"**ברזל (mg):** {float(food_data.get('iron', 0) or 0) * factor:.2f}")
+            st.write(f"**מגנזיום (mg):** {float(food_data.get('magnesium', 0) or 0) * factor:.2f}")
+            st.write(f"**זרחן (mg):** {float(food_data.get('phosphorus', 0) or 0) * factor:.2f}")
+        with col2:
+            st.write(f"**אשלגן (mg):** {float(food_data.get('potassium', 0) or 0) * factor:.1f}")
+            st.write(f"**נתרן (mg):** {float(food_data.get('sodium', 0) or 0) * factor:.1f}")
+            st.write(f"**אבץ (mg):** {float(food_data.get('zinc', 0) or 0) * factor:.2f}")
+            st.write(f"**נחושת (mg):** {float(food_data.get('copper', 0) or 0) * factor:.2f}")
+        with col3:
+            st.write(f"**סלניום (mcg):** {float(food_data.get('selenium', 0) or 0) * factor:.2f}")
+            st.write(f"**מנגן (mg):** {float(food_data.get('manganese', 0) or 0) * factor:.2f}")
+            st.write(f"**יוד (mcg):** {float(food_data.get('iodine', 0) or 0) * factor:.2f}")
+    
+    # Other components
+    with st.expander("📊 רכיבים נוספים"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"**סיבים תזונתיים (g):** {float(food_data.get('total_dietary_fiber', 0) or 0) * factor:.2f}")
+            st.write(f"**סוכרים (g):** {float(food_data.get('total_sugars', 0) or 0) * factor:.2f}")
+            st.write(f"**לחות (g):** {float(food_data.get('moisture', 0) or 0) * factor:.2f}")
+            st.write(f"**אלכוהול (g):** {float(food_data.get('alcohol', 0) or 0) * factor:.2f}")
+        with col2:
+            st.write(f"**קרוטן (mcg):** {float(food_data.get('carotene', 0) or 0) * factor:.1f}")
+            st.write(f"**כולין (mg):** {float(food_data.get('choline', 0) or 0) * factor:.2f}")
+            st.write(f"**ביוטין (mcg):** {float(food_data.get('biotin', 0) or 0) * factor:.2f}")
+
+# Sidebar for navigation
+page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם"])
+
+st.title("🍎 מחשבון תזונתי")
+st.markdown("---")
+
+if page == "חיפוש רגיל":
+    # Regular search section
+    st.subheader("חיפוש מזון")
+    search_term = st.text_input("הזן שם מזון לחיפוש:", placeholder="לדוגמה: חלב, לחם, תפוח...")
+
+    if search_term:
+        results = search_foods(search_term)
+        
+        if len(results) > 0:
+            st.success(f"נמצאו {len(results)} תוצאות")
+            
+            food_options = {row['shmmitzrach']: row['Code'] for _, row in results.iterrows()}
+            selected_food_name = st.selectbox("בחר מזון:", options=list(food_options.keys()))
+            
+            if selected_food_name:
+                selected_food_code = food_options[selected_food_name]
+                food_data = get_food_details(selected_food_code)
+                
+                if food_data is not None:
+                    st.markdown("---")
+                    st.subheader(f"נבחר: {selected_food_name}")
+                    
+                    units_df = get_available_units(selected_food_code)
+                    
+                    if len(units_df) > 0:
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            amount = st.number_input("כמות:", min_value=0.1, max_value=10000.0, value=1.0, step=0.1)
+                        
+                        with col2:
+                            unit_options = {row['shmmida']: (row['mida'], row['mishkal']) for _, row in units_df.iterrows()}
+                            selected_unit_name = st.selectbox("יחידת מידה:", options=list(unit_options.keys()))
+                        
+                        if selected_unit_name:
+                            unit_id, unit_weight = unit_options[selected_unit_name]
+                            factor = (amount * unit_weight) / 100
+                            
+                            st.markdown("---")
+                            st.info(f"**{amount} {selected_unit_name}** = **{amount * unit_weight:.1f} גרם**")
+                            
+                            # Display all nutrition
+                            display_all_nutrition(food_data, factor)
+                    else:
+                        st.warning("אין יחידות מידה זמינות למזון זה")
+        else:
+            st.warning("לא נמצאו תוצאות. נסה חיפוש אחר.")
+    else:
+        st.info("👆 התחל בחיפוש מזון כדי לראות ערכים תזונתיים")
+
+else:  # Advanced search
+    st.subheader("חיפוש מתקדם")
+    st.write("הגדר תנאים לחיפוש מוצרים")
+    
+    # Available fields for search
+    available_fields = {
+        # Macronutrients
+        'food_energy': 'קלוריות (kcal)',
+        'protein': 'חלבון (g)',
+        'total_fat': 'שומן כולל (g)',
+        'carbohydrates': 'פחמימות (g)',
+        'total_dietary_fiber': 'סיבים תזונתיים (g)',
+        'total_sugars': 'סוכרים (g)',
+        'alcohol': 'אלכוהול (g)',
+        'moisture': 'לחות (g)',
+        
+        # Fats
+        'saturated_fat': 'שומן רווי (g)',
+        'mono_unsaturated_fat': 'שומן חד בלתי רווי (g)',
+        'poly_unsaturated_fat': 'שומן רב בלתי רווי (g)',
+        'trans_fatty_acids': 'שומן טרנס (g)',
+        'cholesterol': 'כולסטרול (mg)',
+        'linoleic': 'חומצה לינולאית (אומגה 6) (g)',
+        'linolenic': 'חומצה לינולנית (אומגה 3) (g)',
+        'oleic': 'חומצה אולאית (g)',
+        'docosahexanoic': 'DHA (g)',
+        'eicosapentaenoic': 'EPA (g)',
+        'arachidonic': 'חומצה ארכידונית (g)',
+        
+        # Vitamins
+        'vitamin_a_iu': 'ויטמין A (IU)',
+        'vitamin_a_re': 'ויטמין A (mcg RE)',
+        'carotene': 'קרוטן (mcg)',
+        'vitamin_e': 'ויטמין E (mg)',
+        'vitamin_c': 'ויטמין C (mg)',
+        'thiamin': 'תיאמין B1 (mg)',
+        'riboflavin': 'ריבופלאבין B2 (mg)',
+        'niacin': 'ניאצין B3 (mg)',
+        'vitamin_b6': 'ויטמין B6 (mg)',
+        'folate': 'חומצה פולית (mcg)',
+        'vitamin_b12': 'ויטמין B12 (mcg)',
+        'vitamin_d': 'ויטמין D (mcg)',
+        'vitamin_k': 'ויטמין K (mcg)',
+        'pantothenic_acid': 'חומצה פנטותנית (mg)',
+        'biotin': 'ביוטין (mcg)',
+        'choline': 'כולין (mg)',
+        
+        # Minerals
+        'calcium': 'סידן (mg)',
+        'iron': 'ברזל (mg)',
+        'magnesium': 'מגנזיום (mg)',
+        'phosphorus': 'זרחן (mg)',
+        'potassium': 'אשלגן (mg)',
+        'sodium': 'נתרן (mg)',
+        'zinc': 'אבץ (mg)',
+        'copper': 'נחושת (mg)',
+        'manganese': 'מנגן (mg)',
+        'selenium': 'סלניום (mcg)',
+        'iodine': 'יוד (mcg)',
+        
+        # Amino Acids
+        'isoleucine': 'איזולאוצין (g)',
+        'leucine': 'לאוצין (g)',
+        'valine': 'ואלין (g)',
+        'lysine': 'ליזין (g)',
+        'methionine': 'מתיונין (g)',
+        'phenylalanine': 'פנילאלנין (g)',
+        'threonine': 'תראונין (g)',
+        'tryptophan': 'טריפטופן (g)',
+        'histidine': 'היסטידין (g)',
+        'arginine': 'ארגינין (g)',
+        
+        # Other
+        'fructose': 'פרוקטוז (g)',
+        'sugar_alcohols': 'רב כהלים (g)'
+    }
+    
+    operators = ['שווה', 'גדול מ', 'קטן מ', 'גדול שווה', 'קטן שווה', 'בין']
+    
+    # Initialize session state for conditions
+    if 'conditions' not in st.session_state:
+        st.session_state.conditions = []
+    
+    # Add condition button
+    if st.button("➕ הוסף תנאי"):
+        st.session_state.conditions.append({
+            'field': 'protein', 
+            'operator': 'גדול מ', 
+            'value': 0,
+            'next_operator': 'AND'  # Default to AND
+        })
+    
+    # Display conditions
+    conditions_to_search = []
+    for i, cond in enumerate(st.session_state.conditions):
+        col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 1])
+        
+        with col1:
+            field = st.selectbox(f"פרמטר", options=list(available_fields.keys()), 
+                               format_func=lambda x: available_fields[x], key=f"field_{i}")
+        
+        with col2:
+            operator = st.selectbox(f"תנאי", options=operators, key=f"op_{i}")
+        
+        with col3:
+            value = st.number_input(f"ערך", value=0.0, key=f"val_{i}")
+        
+        with col4:
+            value2 = None
+            if operator == 'בין':
+                value2 = st.number_input(f"עד", value=0.0, key=f"val2_{i}")
+        
+        with col5:
+            if st.button("🗑️", key=f"del_{i}"):
+                st.session_state.conditions.pop(i)
+                st.rerun()
+        
+        condition = {
+            'field': field, 
+            'operator': operator, 
+            'value': value
+        }
+        if value2 is not None:
+            condition['value2'] = value2
+        
+        # Add logic operator selector AFTER each condition (except the last)
+        if i < len(st.session_state.conditions) - 1:
+            st.markdown("##### צירוף תנאים עם:")
+            logic_choice = st.radio(
+                f"בחר לוגיקה בין תנאי {i+1} לתנאי {i+2}:",
+                options=['AND (וגם)', 'OR (או)'],
+                key=f"logic_{i}",
+                horizontal=True,
+                index=0 if st.session_state.conditions[i].get('next_operator', 'AND') == 'AND' else 1
+            )
+            condition['next_operator'] = 'AND' if 'AND' in logic_choice else 'OR'
+            st.markdown("---")
+        
+        conditions_to_search.append(condition)
+    
+    # Column selection
+    st.markdown("### תצוגה")
+    show_all_cols = st.checkbox("הצג את כל העמודות (כל הפרמטרים)")
+    
+    selected_columns = []
+    if not show_all_cols:
+        default_cols = ['food_energy', 'protein', 'total_fat', 'carbohydrates']
+        selected_columns = st.multiselect(
+            "בחר עמודות להצגה:",
+            options=list(available_fields.keys()),
+            format_func=lambda x: available_fields[x],
+            default=default_cols
+        )
+    else:
+        selected_columns = list(available_fields.keys())
+
+    # Search button
+    if st.button("🔍 חפש", type="primary") and conditions_to_search:
+        results = advanced_search(conditions_to_search, selected_columns)
+        
+        if len(results) > 0:
+            st.success(f"נמצאו {len(results)} תוצאות")
+            
+            # Rename columns for display
+            display_df = results.copy()
+            rename_dict = {k: v for k, v in available_fields.items() if k in display_df.columns}
+            rename_dict['shmmitzrach'] = 'שם המזון'
+            rename_dict['Code'] = 'קוד'
+            display_df = display_df.rename(columns=rename_dict)
+            
+            st.dataframe(display_df, use_container_width=True)
+            
+            # Allow selecting from results
+            food_options = {row['shmmitzrach']: row['Code'] for _, row in results.iterrows()}
+            selected_food_name = st.selectbox("בחר מזון להצגה מפורטת:", options=[''] + list(food_options.keys()))
+            
+            if selected_food_name and selected_food_name != '':
+                selected_food_code = food_options[selected_food_name]
+                food_data = get_food_details(selected_food_code)
+                
+                if food_data is not None:
+                    st.markdown("---")
+                    st.subheader(f"פרטים: {selected_food_name}")
+                    display_all_nutrition(food_data, factor=1.0)
+        else:
+            st.warning("לא נמצאו תוצאות התואמות את התנאים")
+
+
+# Footer
+st.markdown("---")
+st.caption("נתונים ממאגר משרד הבריאות")
