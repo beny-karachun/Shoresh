@@ -13,76 +13,77 @@ def get_connection():
 
 
 # Global Constants
+# Global Constants
 FIELDS_MAPPING = {
     # Macronutrients
-    'food_energy': 'קלוריות (kcal)',
-    'protein': 'חלבון (g)',
-    'total_fat': 'שומן כולל (g)',
-    'carbohydrates': 'פחמימות (g)',
-    'total_dietary_fiber': 'סיבים תזונתיים (g)',
-    'total_sugars': 'סוכרים (g)',
-    'alcohol': 'אלכוהול (g)',
-    'moisture': 'לחות (g)',
+    'food_energy': 'קלוריות (קק"ל)',
+    'protein': 'חלבון (גרם)',
+    'total_fat': 'שומן כולל (גרם)',
+    'carbohydrates': 'פחמימות (גרם)',
+    'total_dietary_fiber': 'סיבים תזונתיים (גרם)',
+    'total_sugars': 'סוכרים (גרם)',
+    'alcohol': 'אלכוהול (גרם)',
+    'moisture': 'לחות (גרם)',
     
     # Fats
-    'saturated_fat': 'שומן רווי (g)',
-    'mono_unsaturated_fat': 'שומן חד בלתי רווי (g)',
-    'poly_unsaturated_fat': 'שומן רב בלתי רווי (g)',
-    'trans_fatty_acids': 'שומן טרנס (g)',
-    'cholesterol': 'כולסטרול (mg)',
-    'linoleic': 'חומצה לינולאית (אומגה 6) (g)',
-    'linolenic': 'חומצה לינולנית (אומגה 3) (g)',
-    'oleic': 'חומצה אולאית (g)',
-    'docosahexanoic': 'DHA (g)',
-    'eicosapentaenoic': 'EPA (g)',
-    'arachidonic': 'חומצה ארכידונית (g)',
+    'saturated_fat': 'שומן רווי (גרם)',
+    'mono_unsaturated_fat': 'שומן חד בלתי רווי (גרם)',
+    'poly_unsaturated_fat': 'שומן רב בלתי רווי (גרם)',
+    'trans_fatty_acids': 'שומן טרנס (גרם)',
+    'cholesterol': 'כולסטרול (מ"ג)',
+    'linoleic': 'חומצה לינולאית (אומגה 6) (גרם)',
+    'linolenic': 'חומצה לינולנית (אומגה 3) (גרם)',
+    'oleic': 'חומצה אולאית (גרם)',
+    'docosahexanoic': 'DHA (גרם)',
+    'eicosapentaenoic': 'EPA (גרם)',
+    'arachidonic': 'חומצה ארכידונית (גרם)',
     
     # Vitamins
-    'vitamin_a_iu': 'ויטמין A (IU)',
-    'vitamin_a_re': 'ויטמין A (mcg RE)',
-    'carotene': 'קרוטן (mcg)',
-    'vitamin_e': 'ויטמין E (mg)',
-    'vitamin_c': 'ויטמין C (mg)',
-    'thiamin': 'תיאמין B1 (mg)',
-    'riboflavin': 'ריבופלאבין B2 (mg)',
-    'niacin': 'ניאצין B3 (mg)',
-    'vitamin_b6': 'ויטמין B6 (mg)',
-    'folate': 'חומצה פולית (mcg)',
-    'vitamin_b12': 'ויטמין B12 (mcg)',
-    'vitamin_d': 'ויטמין D (mcg)',
-    'vitamin_k': 'ויטמין K (mcg)',
-    'pantothenic_acid': 'חומצה פנטותנית (mg)',
-    'biotin': 'ביוטין (mcg)',
-    'choline': 'כולין (mg)',
+    'vitamin_a_iu': 'ויטמין A (יחב"ל)',
+    'vitamin_a_re': 'ויטמין A (מק"ג RE)',
+    'carotene': 'קרוטן (מק"ג)',
+    'vitamin_e': 'ויטמין E (מ"ג)',
+    'vitamin_c': 'ויטמין C (מ"ג)',
+    'thiamin': 'תיאמין B1 (מ"ג)',
+    'riboflavin': 'ריבופלאבין B2 (מ"ג)',
+    'niacin': 'ניאצין B3 (מ"ג)',
+    'vitamin_b6': 'ויטמין B6 (מ"ג)',
+    'folate': 'חומצה פולית (מק"ג)',
+    'vitamin_b12': 'ויטמין B12 (מק"ג)',
+    'vitamin_d': 'ויטמין D (מק"ג)',
+    'vitamin_k': 'ויטמין K (מק"ג)',
+    'pantothenic_acid': 'חומצה פנטותנית (מ"ג)',
+    'biotin': 'ביוטין (מק"ג)',
+    'choline': 'כולין (מ"ג)',
     
     # Minerals
-    'calcium': 'סידן (mg)',
-    'iron': 'ברזל (mg)',
-    'magnesium': 'מגנזיום (mg)',
-    'phosphorus': 'זרחן (mg)',
-    'potassium': 'אשלגן (mg)',
-    'sodium': 'נתרן (mg)',
-    'zinc': 'אבץ (mg)',
-    'copper': 'נחושת (mg)',
-    'manganese': 'מנגן (mg)',
-    'selenium': 'סלניום (mcg)',
-    'iodine': 'יוד (mcg)',
+    'calcium': 'סידן (מ"ג)',
+    'iron': 'ברזל (מ"ג)',
+    'magnesium': 'מגנזיום (מ"ג)',
+    'phosphorus': 'זרחן (מ"ג)',
+    'potassium': 'אשלגן (מ"ג)',
+    'sodium': 'נתרן (מ"ג)',
+    'zinc': 'אבץ (מ"ג)',
+    'copper': 'נחושת (מ"ג)',
+    'manganese': 'מנגן (מ"ג)',
+    'selenium': 'סלניום (מק"ג)',
+    'iodine': 'יוד (מק"ג)',
     
     # Amino Acids
-    'isoleucine': 'איזולאוצין (g)',
-    'leucine': 'לאוצין (g)',
-    'valine': 'ואלין (g)',
-    'lysine': 'ליזין (g)',
-    'methionine': 'מתיונין (g)',
-    'phenylalanine': 'פנילאלנין (g)',
-    'threonine': 'תראונין (g)',
-    'tryptophan': 'טריפטופן (g)',
-    'histidine': 'היסטידין (g)',
-    'arginine': 'ארגינין (g)',
+    'isoleucine': 'איזולאוצין (גרם)',
+    'leucine': 'לאוצין (גרם)',
+    'valine': 'ואלין (גרם)',
+    'lysine': 'ליזין (גרם)',
+    'methionine': 'מתיונין (גרם)',
+    'phenylalanine': 'פנילאלנין (גרם)',
+    'threonine': 'תראונין (גרם)',
+    'tryptophan': 'טריפטופן (גרם)',
+    'histidine': 'היסטידין (גרם)',
+    'arginine': 'ארגינין (גרם)',
     
     # Other
-    'fructose': 'פרוקטוז (g)',
-    'sugar_alcohols': 'רב כהלים (g)'
+    'fructose': 'פרוקטוז (גרם)',
+    'sugar_alcohols': 'רב כהלים (גרם)'
 }
 
 def search_foods(search_term):
@@ -201,79 +202,79 @@ def display_all_nutrition(food_data, factor=1.0):
     st.markdown("### מקרו-נוטריינטים")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("קלוריות (kcal)", f"{float(food_data.get('food_energy', 0) or 0) * factor:.1f}")
+        st.metric("קלוריות (קק\"ל)", f"{float(food_data.get('food_energy', 0) or 0) * factor:.1f}")
     with col2:
-        st.metric("חלבון (g)", f"{float(food_data.get('protein', 0) or 0) * factor:.1f}")
+        st.metric("חלבון (גרם)", f"{float(food_data.get('protein', 0) or 0) * factor:.1f}")
     with col3:
-        st.metric("פחמימות (g)", f"{float(food_data.get('carbohydrates', 0) or 0) * factor:.1f}")
+        st.metric("פחמימות (גרם)", f"{float(food_data.get('carbohydrates', 0) or 0) * factor:.1f}")
     with col4:
-        st.metric("שומן כולל (g)", f"{float(food_data.get('total_fat', 0) or 0) * factor:.1f}")
+        st.metric("שומן כולל (גרם)", f"{float(food_data.get('total_fat', 0) or 0) * factor:.1f}")
     
     # Fats breakdown
     with st.expander("🧈 פירוט שומנים"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.write(f"**שומן רווי:** {float(food_data.get('saturated_fat', 0) or 0) * factor:.2f}g")
-            st.write(f"**שומן חד בלתי רווי:** {float(food_data.get('mono_unsaturated_fat', 0) or 0) * factor:.2f}g")
-            st.write(f"**שומן רב בלתי רווי:** {float(food_data.get('poly_unsaturated_fat', 0) or 0) * factor:.2f}g")
+            st.write(f"**שומן רווי:** {float(food_data.get('saturated_fat', 0) or 0) * factor:.2f} גרם")
+            st.write(f"**שומן חד בלתי רווי:** {float(food_data.get('mono_unsaturated_fat', 0) or 0) * factor:.2f} גרם")
+            st.write(f"**שומן רב בלתי רווי:** {float(food_data.get('poly_unsaturated_fat', 0) or 0) * factor:.2f} גרם")
         with col2:
-            st.write(f"**חומצות שומן טרנס:** {float(food_data.get('trans_fatty_acids', 0) or 0) * factor:.2f}g")
-            st.write(f"**כולסטרול:** {float(food_data.get('cholesterol', 0) or 0) * factor:.2f}mg")
-            st.write(f"**אומגה 3 (לינולנית):** {float(food_data.get('linolenic', 0) or 0) * factor:.2f}g")
+            st.write(f"**חומצות שומן טרנס:** {float(food_data.get('trans_fatty_acids', 0) or 0) * factor:.2f} גרם")
+            st.write(f"**כולסטרול:** {float(food_data.get('cholesterol', 0) or 0) * factor:.2f} מ\"ג")
+            st.write(f"**אומגה 3 (לינולנית):** {float(food_data.get('linolenic', 0) or 0) * factor:.2f} גרם")
         with col3:
-            st.write(f"**אומגה 6 (לינולאית):** {float(food_data.get('linoleic', 0) or 0) * factor:.2f}g")
-            st.write(f"**חומצה אולאית:** {float(food_data.get('oleic', 0) or 0) * factor:.2f}g")
+            st.write(f"**אומגה 6 (לינולאית):** {float(food_data.get('linoleic', 0) or 0) * factor:.2f} גרם")
+            st.write(f"**חומצה אולאית:** {float(food_data.get('oleic', 0) or 0) * factor:.2f} גרם")
     
     # Vitamins
     with st.expander("💊 ויטמינים"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.write(f"**ויטמין A (IU):** {float(food_data.get('vitamin_a_iu', 0) or 0) * factor:.1f}")
-            st.write(f"**ויטמין A (mcg):** {float(food_data.get('vitamin_a_re', 0) or 0) * factor:.1f}")
-            st.write(f"**ויטמין C (mg):** {float(food_data.get('vitamin_c', 0) or 0) * factor:.2f}")
-            st.write(f"**ויטמין D (mcg):** {float(food_data.get('vitamin_d', 0) or 0) * factor:.2f}")
-            st.write(f"**ויטמין E (mg):** {float(food_data.get('vitamin_e', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין A (יחב\"ל):** {float(food_data.get('vitamin_a_iu', 0) or 0) * factor:.1f}")
+            st.write(f"**ויטמין A (מק\"ג):** {float(food_data.get('vitamin_a_re', 0) or 0) * factor:.1f}")
+            st.write(f"**ויטמין C (מ\"ג):** {float(food_data.get('vitamin_c', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין D (מק\"ג):** {float(food_data.get('vitamin_d', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין E (מ\"ג):** {float(food_data.get('vitamin_e', 0) or 0) * factor:.2f}")
         with col2:
-            st.write(f"**ויטמין K (mcg):** {float(food_data.get('vitamin_k', 0) or 0) * factor:.2f}")
-            st.write(f"**תיאמין B1 (mg):** {float(food_data.get('thiamin', 0) or 0) * factor:.2f}")
-            st.write(f"**ריבופלאבין B2 (mg):** {float(food_data.get('riboflavin', 0) or 0) * factor:.2f}")
-            st.write(f"**ניאצין B3 (mg):** {float(food_data.get('niacin', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין K (מק\"ג):** {float(food_data.get('vitamin_k', 0) or 0) * factor:.2f}")
+            st.write(f"**תיאמין B1 (מ\"ג):** {float(food_data.get('thiamin', 0) or 0) * factor:.2f}")
+            st.write(f"**ריבופלאבין B2 (מ\"ג):** {float(food_data.get('riboflavin', 0) or 0) * factor:.2f}")
+            st.write(f"**ניאצין B3 (מ\"ג):** {float(food_data.get('niacin', 0) or 0) * factor:.2f}")
         with col3:
-            st.write(f"**ויטמין B6 (mg):** {float(food_data.get('vitamin_b6', 0) or 0) * factor:.2f}")
-            st.write(f"**ויטמין B12 (mcg):** {float(food_data.get('vitamin_b12', 0) or 0) * factor:.2f}")
-            st.write(f"**חומצה פולית (mcg):** {float(food_data.get('folate', 0) or 0) * factor:.2f}")
-            st.write(f"**חומצה פנטותנית (mg):** {float(food_data.get('pantothenic_acid', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין B6 (מ\"ג):** {float(food_data.get('vitamin_b6', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין B12 (מק\"ג):** {float(food_data.get('vitamin_b12', 0) or 0) * factor:.2f}")
+            st.write(f"**חומצה פולית (מק\"ג):** {float(food_data.get('folate', 0) or 0) * factor:.2f}")
+            st.write(f"**חומצה פנטותנית (מ\"ג):** {float(food_data.get('pantothenic_acid', 0) or 0) * factor:.2f}")
     
     # Minerals
     with st.expander("⚗️ מינרלים"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.write(f"**סידן (mg):** {float(food_data.get('calcium', 0) or 0) * factor:.1f}")
-            st.write(f"**ברזל (mg):** {float(food_data.get('iron', 0) or 0) * factor:.2f}")
-            st.write(f"**מגנזיום (mg):** {float(food_data.get('magnesium', 0) or 0) * factor:.2f}")
-            st.write(f"**זרחן (mg):** {float(food_data.get('phosphorus', 0) or 0) * factor:.2f}")
+            st.write(f"**סידן (מ\"ג):** {float(food_data.get('calcium', 0) or 0) * factor:.1f}")
+            st.write(f"**ברזל (מ\"ג):** {float(food_data.get('iron', 0) or 0) * factor:.2f}")
+            st.write(f"**מגנזיום (מ\"ג):** {float(food_data.get('magnesium', 0) or 0) * factor:.2f}")
+            st.write(f"**זרחן (מ\"ג):** {float(food_data.get('phosphorus', 0) or 0) * factor:.2f}")
         with col2:
-            st.write(f"**אשלגן (mg):** {float(food_data.get('potassium', 0) or 0) * factor:.1f}")
-            st.write(f"**נתרן (mg):** {float(food_data.get('sodium', 0) or 0) * factor:.1f}")
-            st.write(f"**אבץ (mg):** {float(food_data.get('zinc', 0) or 0) * factor:.2f}")
-            st.write(f"**נחושת (mg):** {float(food_data.get('copper', 0) or 0) * factor:.2f}")
+            st.write(f"**אשלגן (מ\"ג):** {float(food_data.get('potassium', 0) or 0) * factor:.1f}")
+            st.write(f"**נתרן (מ\"ג):** {float(food_data.get('sodium', 0) or 0) * factor:.1f}")
+            st.write(f"**אבץ (מ\"ג):** {float(food_data.get('zinc', 0) or 0) * factor:.2f}")
+            st.write(f"**נחושת (מ\"ג):** {float(food_data.get('copper', 0) or 0) * factor:.2f}")
         with col3:
-            st.write(f"**סלניום (mcg):** {float(food_data.get('selenium', 0) or 0) * factor:.2f}")
-            st.write(f"**מנגן (mg):** {float(food_data.get('manganese', 0) or 0) * factor:.2f}")
-            st.write(f"**יוד (mcg):** {float(food_data.get('iodine', 0) or 0) * factor:.2f}")
+            st.write(f"**סלניום (מק\"ג):** {float(food_data.get('selenium', 0) or 0) * factor:.2f}")
+            st.write(f"**מנגן (מ\"ג):** {float(food_data.get('manganese', 0) or 0) * factor:.2f}")
+            st.write(f"**יוד (מק\"ג):** {float(food_data.get('iodine', 0) or 0) * factor:.2f}")
     
     # Other components
     with st.expander("📊 רכיבים נוספים"):
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"**סיבים תזונתיים (g):** {float(food_data.get('total_dietary_fiber', 0) or 0) * factor:.2f}")
-            st.write(f"**סוכרים (g):** {float(food_data.get('total_sugars', 0) or 0) * factor:.2f}")
-            st.write(f"**לחות (g):** {float(food_data.get('moisture', 0) or 0) * factor:.2f}")
-            st.write(f"**אלכוהול (g):** {float(food_data.get('alcohol', 0) or 0) * factor:.2f}")
+            st.write(f"**סיבים תזונתיים (גרם):** {float(food_data.get('total_dietary_fiber', 0) or 0) * factor:.2f}")
+            st.write(f"**סוכרים (גרם):** {float(food_data.get('total_sugars', 0) or 0) * factor:.2f}")
+            st.write(f"**לחות (גרם):** {float(food_data.get('moisture', 0) or 0) * factor:.2f}")
+            st.write(f"**אלכוהול (גרם):** {float(food_data.get('alcohol', 0) or 0) * factor:.2f}")
         with col2:
-            st.write(f"**קרוטן (mcg):** {float(food_data.get('carotene', 0) or 0) * factor:.1f}")
-            st.write(f"**כולין (mg):** {float(food_data.get('choline', 0) or 0) * factor:.2f}")
-            st.write(f"**ביוטין (mcg):** {float(food_data.get('biotin', 0) or 0) * factor:.2f}")
+            st.write(f"**קרוטן (מק\"ג):** {float(food_data.get('carotene', 0) or 0) * factor:.1f}")
+            st.write(f"**כולין (מ\"ג):** {float(food_data.get('choline', 0) or 0) * factor:.2f}")
+            st.write(f"**ביוטין (מק\"ג):** {float(food_data.get('biotin', 0) or 0) * factor:.2f}")
 
 # Sidebar for navigation
 page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם", "השוואת מוצרים"])
