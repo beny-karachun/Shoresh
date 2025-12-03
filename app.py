@@ -11,6 +11,80 @@ def get_connection():
     """Create database connection"""
     return sqlite3.connect('nutrition.db', check_same_thread=False)
 
+
+# Global Constants
+FIELDS_MAPPING = {
+    # Macronutrients
+    'food_energy': 'קלוריות (kcal)',
+    'protein': 'חלבון (g)',
+    'total_fat': 'שומן כולל (g)',
+    'carbohydrates': 'פחמימות (g)',
+    'total_dietary_fiber': 'סיבים תזונתיים (g)',
+    'total_sugars': 'סוכרים (g)',
+    'alcohol': 'אלכוהול (g)',
+    'moisture': 'לחות (g)',
+    
+    # Fats
+    'saturated_fat': 'שומן רווי (g)',
+    'mono_unsaturated_fat': 'שומן חד בלתי רווי (g)',
+    'poly_unsaturated_fat': 'שומן רב בלתי רווי (g)',
+    'trans_fatty_acids': 'שומן טרנס (g)',
+    'cholesterol': 'כולסטרול (mg)',
+    'linoleic': 'חומצה לינולאית (אומגה 6) (g)',
+    'linolenic': 'חומצה לינולנית (אומגה 3) (g)',
+    'oleic': 'חומצה אולאית (g)',
+    'docosahexanoic': 'DHA (g)',
+    'eicosapentaenoic': 'EPA (g)',
+    'arachidonic': 'חומצה ארכידונית (g)',
+    
+    # Vitamins
+    'vitamin_a_iu': 'ויטמין A (IU)',
+    'vitamin_a_re': 'ויטמין A (mcg RE)',
+    'carotene': 'קרוטן (mcg)',
+    'vitamin_e': 'ויטמין E (mg)',
+    'vitamin_c': 'ויטמין C (mg)',
+    'thiamin': 'תיאמין B1 (mg)',
+    'riboflavin': 'ריבופלאבין B2 (mg)',
+    'niacin': 'ניאצין B3 (mg)',
+    'vitamin_b6': 'ויטמין B6 (mg)',
+    'folate': 'חומצה פולית (mcg)',
+    'vitamin_b12': 'ויטמין B12 (mcg)',
+    'vitamin_d': 'ויטמין D (mcg)',
+    'vitamin_k': 'ויטמין K (mcg)',
+    'pantothenic_acid': 'חומצה פנטותנית (mg)',
+    'biotin': 'ביוטין (mcg)',
+    'choline': 'כולין (mg)',
+    
+    # Minerals
+    'calcium': 'סידן (mg)',
+    'iron': 'ברזל (mg)',
+    'magnesium': 'מגנזיום (mg)',
+    'phosphorus': 'זרחן (mg)',
+    'potassium': 'אשלגן (mg)',
+    'sodium': 'נתרן (mg)',
+    'zinc': 'אבץ (mg)',
+    'copper': 'נחושת (mg)',
+    'manganese': 'מנגן (mg)',
+    'selenium': 'סלניום (mcg)',
+    'iodine': 'יוד (mcg)',
+    
+    # Amino Acids
+    'isoleucine': 'איזולאוצין (g)',
+    'leucine': 'לאוצין (g)',
+    'valine': 'ואלין (g)',
+    'lysine': 'ליזין (g)',
+    'methionine': 'מתיונין (g)',
+    'phenylalanine': 'פנילאלנין (g)',
+    'threonine': 'תראונין (g)',
+    'tryptophan': 'טריפטופן (g)',
+    'histidine': 'היסטידין (g)',
+    'arginine': 'ארגינין (g)',
+    
+    # Other
+    'fructose': 'פרוקטוז (g)',
+    'sugar_alcohols': 'רב כהלים (g)'
+}
+
 def search_foods(search_term):
     """Search for foods by name"""
     conn = get_connection()
@@ -202,7 +276,7 @@ def display_all_nutrition(food_data, factor=1.0):
             st.write(f"**ביוטין (mcg):** {float(food_data.get('biotin', 0) or 0) * factor:.2f}")
 
 # Sidebar for navigation
-page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם"])
+page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם", "השוואת מוצרים"])
 
 st.title("🍎 מחשבון תזונתי")
 st.markdown("---")
@@ -257,82 +331,13 @@ if page == "חיפוש רגיל":
     else:
         st.info("👆 התחל בחיפוש מזון כדי לראות ערכים תזונתיים")
 
-else:  # Advanced search
+elif page == "חיפוש מתקדם":
     st.subheader("חיפוש מתקדם")
     st.write("הגדר תנאים לחיפוש מוצרים")
     
     # Available fields for search
-    available_fields = {
-        # Macronutrients
-        'food_energy': 'קלוריות (kcal)',
-        'protein': 'חלבון (g)',
-        'total_fat': 'שומן כולל (g)',
-        'carbohydrates': 'פחמימות (g)',
-        'total_dietary_fiber': 'סיבים תזונתיים (g)',
-        'total_sugars': 'סוכרים (g)',
-        'alcohol': 'אלכוהול (g)',
-        'moisture': 'לחות (g)',
-        
-        # Fats
-        'saturated_fat': 'שומן רווי (g)',
-        'mono_unsaturated_fat': 'שומן חד בלתי רווי (g)',
-        'poly_unsaturated_fat': 'שומן רב בלתי רווי (g)',
-        'trans_fatty_acids': 'שומן טרנס (g)',
-        'cholesterol': 'כולסטרול (mg)',
-        'linoleic': 'חומצה לינולאית (אומגה 6) (g)',
-        'linolenic': 'חומצה לינולנית (אומגה 3) (g)',
-        'oleic': 'חומצה אולאית (g)',
-        'docosahexanoic': 'DHA (g)',
-        'eicosapentaenoic': 'EPA (g)',
-        'arachidonic': 'חומצה ארכידונית (g)',
-        
-        # Vitamins
-        'vitamin_a_iu': 'ויטמין A (IU)',
-        'vitamin_a_re': 'ויטמין A (mcg RE)',
-        'carotene': 'קרוטן (mcg)',
-        'vitamin_e': 'ויטמין E (mg)',
-        'vitamin_c': 'ויטמין C (mg)',
-        'thiamin': 'תיאמין B1 (mg)',
-        'riboflavin': 'ריבופלאבין B2 (mg)',
-        'niacin': 'ניאצין B3 (mg)',
-        'vitamin_b6': 'ויטמין B6 (mg)',
-        'folate': 'חומצה פולית (mcg)',
-        'vitamin_b12': 'ויטמין B12 (mcg)',
-        'vitamin_d': 'ויטמין D (mcg)',
-        'vitamin_k': 'ויטמין K (mcg)',
-        'pantothenic_acid': 'חומצה פנטותנית (mg)',
-        'biotin': 'ביוטין (mcg)',
-        'choline': 'כולין (mg)',
-        
-        # Minerals
-        'calcium': 'סידן (mg)',
-        'iron': 'ברזל (mg)',
-        'magnesium': 'מגנזיום (mg)',
-        'phosphorus': 'זרחן (mg)',
-        'potassium': 'אשלגן (mg)',
-        'sodium': 'נתרן (mg)',
-        'zinc': 'אבץ (mg)',
-        'copper': 'נחושת (mg)',
-        'manganese': 'מנגן (mg)',
-        'selenium': 'סלניום (mcg)',
-        'iodine': 'יוד (mcg)',
-        
-        # Amino Acids
-        'isoleucine': 'איזולאוצין (g)',
-        'leucine': 'לאוצין (g)',
-        'valine': 'ואלין (g)',
-        'lysine': 'ליזין (g)',
-        'methionine': 'מתיונין (g)',
-        'phenylalanine': 'פנילאלנין (g)',
-        'threonine': 'תראונין (g)',
-        'tryptophan': 'טריפטופן (g)',
-        'histidine': 'היסטידין (g)',
-        'arginine': 'ארגינין (g)',
-        
-        # Other
-        'fructose': 'פרוקטוז (g)',
-        'sugar_alcohols': 'רב כהלים (g)'
-    }
+    # Available fields for search
+    available_fields = FIELDS_MAPPING
     
     operators = ['שווה', 'גדול מ', 'קטן מ', 'גדול שווה', 'קטן שווה', 'בין']
     
@@ -443,6 +448,145 @@ else:  # Advanced search
                     display_all_nutrition(food_data, factor=1.0)
         else:
             st.warning("לא נמצאו תוצאות התואמות את התנאים")
+
+elif page == "השוואת מוצרים":
+    st.subheader("השוואת מוצרים")
+    st.write("בחר מוצרים להשוואה וראה את ההבדלים התזונתיים ביניהם")
+
+    # Initialize comparison list
+    if 'comparison_list' not in st.session_state:
+        st.session_state.comparison_list = []
+
+    # Product Search Section
+    with st.expander("🔍 הוסף מוצרים להשוואה", expanded=True):
+        search_term = st.text_input("חפש מוצר להוספה:", placeholder="לדוגמה: חלב, גבינה...")
+        
+        if search_term:
+            results = search_foods(search_term)
+            if len(results) > 0:
+                food_options = {row['shmmitzrach']: row['Code'] for _, row in results.iterrows()}
+                selected_food_to_add = st.selectbox("בחר מוצר:", options=[''] + list(food_options.keys()))
+                
+                if selected_food_to_add and selected_food_to_add != '':
+                    code = food_options[selected_food_to_add]
+                    
+                    # Check if already in list
+                    if any(item['code'] == code for item in st.session_state.comparison_list):
+                        st.warning("המוצר כבר נמצא ברשימת ההשוואה")
+                    else:
+                        if st.button("הוסף להשוואה"):
+                            st.session_state.comparison_list.append({
+                                'name': selected_food_to_add,
+                                'code': code
+                            })
+                            st.success(f"נוסף: {selected_food_to_add}")
+                            st.rerun()
+            else:
+                st.warning("לא נמצאו תוצאות")
+
+    # Selected Products List
+    if st.session_state.comparison_list:
+        st.markdown("### מוצרים שנבחרו")
+        
+        # Display selected products with remove buttons
+        for i, item in enumerate(st.session_state.comparison_list):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.info(item['name'])
+            with col2:
+                if st.button("❌ הסר", key=f"remove_{i}"):
+                    st.session_state.comparison_list.pop(i)
+                    st.rerun()
+        
+        st.markdown("---")
+        
+        # Parameter Selection
+        st.markdown("### פרמטרים להשוואה")
+        
+        # Define available parameters (reuse from advanced search but maybe structured differently if needed)
+        # For simplicity, we'll use the same dictionary but flattened for multiselect
+        
+        # We need to access the available_fields from the advanced search section or define them globally.
+        # Since they are defined inside the 'else' block of advanced search, we should probably move them to a global scope or redefine them.
+        # To avoid massive refactoring, I will redefine a comprehensive list here or move the definition up.
+        # Moving the definition up is better engineering.
+        
+        # Let's define the fields here for now to avoid breaking the other section if I mess up the move.
+        # Actually, I'll just copy the dictionary for safety and simplicity in this iteration.
+        
+        # Use global fields mapping
+        comparison_fields = FIELDS_MAPPING
+        
+        col_params1, col_params2 = st.columns([3, 1])
+        
+        with col_params2:
+            select_all = st.checkbox("בחר הכל")
+        
+        with col_params1:
+            if select_all:
+                selected_params = list(comparison_fields.keys())
+                st.info("כל הפרמטרים נבחרו")
+            else:
+                default_params = ['food_energy', 'protein', 'total_fat', 'carbohydrates']
+                selected_params = st.multiselect(
+                    "בחר פרמטרים:",
+                    options=list(comparison_fields.keys()),
+                    format_func=lambda x: comparison_fields[x],
+                    default=default_params
+                )
+        
+        # Generate Comparison Table
+        if selected_params:
+            st.markdown("### הגדרות השוואה")
+            col_conf1, col_conf2 = st.columns(2)
+            
+            with col_conf1:
+                comparison_amount = st.number_input("כמות להשוואה (גרם):", min_value=1.0, value=100.0, step=10.0)
+            
+            with col_conf2:
+                sort_by = st.selectbox("מיין לפי:", options=['ללא'] + selected_params, format_func=lambda x: comparison_fields.get(x, x))
+
+            st.markdown(f"### טבלת השוואה (ל-{comparison_amount:g} גרם)")
+            
+            comparison_data = {}
+            
+            # First pass: collect data
+            products_data = []
+            for item in st.session_state.comparison_list:
+                food_details = get_food_details(item['code'])
+                if food_details is not None:
+                    product_values = {}
+                    product_values['name'] = item['name']
+                    
+                    # Calculate factor based on custom amount (default data is per 100g)
+                    factor = comparison_amount / 100.0
+                    
+                    for param in selected_params:
+                        val = food_details.get(param, 0)
+                        if pd.isna(val):
+                            val = 0
+                        product_values[param] = float(val) * factor
+                    
+                    products_data.append(product_values)
+            
+            # Sort data if requested
+            if sort_by and sort_by != 'ללא':
+                products_data.sort(key=lambda x: x.get(sort_by, 0), reverse=True)
+            
+            # Rearrange for DataFrame (Rows: Parameters, Columns: Products)
+            final_data = {}
+            for prod in products_data:
+                final_data[prod['name']] = [prod[p] for p in selected_params]
+            
+            # Create DataFrame
+            df_compare = pd.DataFrame(final_data, index=[comparison_fields[p] for p in selected_params])
+            
+            # Calculate dynamic height (approx 35px per row + header)
+            table_height = (len(df_compare) + 1) * 35 + 3
+            st.dataframe(df_compare, use_container_width=True, height=table_height)
+            
+    else:
+        st.info("👆 הוסף מוצרים כדי להתחיל בהשוואה")
 
 
 # Footer
