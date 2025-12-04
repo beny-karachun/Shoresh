@@ -86,6 +86,78 @@ FIELDS_MAPPING = {
     'sugar_alcohols': 'רב כהלים (גרם)'
 }
 
+def count_sig_figs(value):
+    """Count significant figures of a number"""
+    if value is None:
+        return 0
+    
+    # Convert to string
+    s = str(value).lower()
+    
+    # Handle scientific notation
+    if 'e' in s:
+        base, _ = s.split('e')
+        return count_sig_figs(base)
+    
+    # Remove negative sign
+    s = s.replace('-', '')
+    
+    # Remove decimal point
+    s_no_decimal = s.replace('.', '')
+    
+    # Strip leading zeros
+    s_stripped = s_no_decimal.lstrip('0')
+    
+    if not s_stripped:
+        return 0
+        
+    return len(s_stripped)
+
+def round_to_sig_figs(x, sig_figs):
+    """Round a number to a specific number of significant figures"""
+    if x == 0:
+        return 0
+    
+    import math
+    try:
+        return round(x, sig_figs - int(math.floor(math.log10(abs(x)))) - 1)
+    except (ValueError, OverflowError):
+        return x
+
+def calculate_with_sig_figs(original_value, factor):
+    """Calculate new value preserving significant figures"""
+    if original_value is None:
+        return 0
+    
+    try:
+        val_float = float(original_value)
+        if val_float == 0:
+            return 0
+            
+        # Count sig figs from the original representation
+        # If it's an integer in DB (e.g. 24), it comes as 24 or 24.0 depending on pandas
+        # We should try to respect the input type if possible, but here we have values.
+        # We'll use the string representation of the input value.
+        sig_figs = count_sig_figs(original_value)
+        
+        # If sig_figs is 0 (e.g. input was 0), return 0
+        if sig_figs == 0:
+            return 0
+            
+        new_val = val_float * factor
+        rounded_val = round_to_sig_figs(new_val, sig_figs)
+        
+        # Format logic:
+        # If the result is an integer (e.g. 10.0) and original was int-like, maybe show int?
+        # But 10.0 has 3 sig figs, 10 has 2.
+        # We should return a string that represents the sig figs.
+        # However, standard float formatting might be enough for now.
+        # Let's return the rounded float.
+        return rounded_val
+        
+    except (ValueError, TypeError):
+        return 0
+
 def search_foods(search_term):
     """Search for foods by name"""
     conn = get_connection()
@@ -198,86 +270,89 @@ def get_available_units(food_code):
 def display_all_nutrition(food_data, factor=1.0):
     """Display all nutritional parameters"""
     
+    def get_val(param):
+        return calculate_with_sig_figs(food_data.get(param), factor)
+
     # Main macronutrients
     st.markdown("### מקרו-נוטריינטים")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("קלוריות (קק\"ל)", f"{float(food_data.get('food_energy', 0) or 0) * factor:.1f}")
+        st.metric("קלוריות (קק\"ל)", f"{get_val('food_energy')}")
     with col2:
-        st.metric("חלבון (גרם)", f"{float(food_data.get('protein', 0) or 0) * factor:.1f}")
+        st.metric("חלבון (גרם)", f"{get_val('protein')}")
     with col3:
-        st.metric("פחמימות (גרם)", f"{float(food_data.get('carbohydrates', 0) or 0) * factor:.1f}")
+        st.metric("פחמימות (גרם)", f"{get_val('carbohydrates')}")
     with col4:
-        st.metric("שומן כולל (גרם)", f"{float(food_data.get('total_fat', 0) or 0) * factor:.1f}")
+        st.metric("שומן כולל (גרם)", f"{get_val('total_fat')}")
     
     # Fats breakdown
     with st.expander("🧈 פירוט שומנים"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.write(f"**שומן רווי:** {float(food_data.get('saturated_fat', 0) or 0) * factor:.2f} גרם")
-            st.write(f"**שומן חד בלתי רווי:** {float(food_data.get('mono_unsaturated_fat', 0) or 0) * factor:.2f} גרם")
-            st.write(f"**שומן רב בלתי רווי:** {float(food_data.get('poly_unsaturated_fat', 0) or 0) * factor:.2f} גרם")
+            st.write(f"**שומן רווי:** {get_val('saturated_fat')} גרם")
+            st.write(f"**שומן חד בלתי רווי:** {get_val('mono_unsaturated_fat')} גרם")
+            st.write(f"**שומן רב בלתי רווי:** {get_val('poly_unsaturated_fat')} גרם")
         with col2:
-            st.write(f"**חומצות שומן טרנס:** {float(food_data.get('trans_fatty_acids', 0) or 0) * factor:.2f} גרם")
-            st.write(f"**כולסטרול:** {float(food_data.get('cholesterol', 0) or 0) * factor:.2f} מ\"ג")
-            st.write(f"**אומגה 3 (לינולנית):** {float(food_data.get('linolenic', 0) or 0) * factor:.2f} גרם")
+            st.write(f"**חומצות שומן טרנס:** {get_val('trans_fatty_acids')} גרם")
+            st.write(f"**כולסטרול:** {get_val('cholesterol')} מ\"ג")
+            st.write(f"**אומגה 3 (לינולנית):** {get_val('linolenic')} גרם")
         with col3:
-            st.write(f"**אומגה 6 (לינולאית):** {float(food_data.get('linoleic', 0) or 0) * factor:.2f} גרם")
-            st.write(f"**חומצה אולאית:** {float(food_data.get('oleic', 0) or 0) * factor:.2f} גרם")
+            st.write(f"**אומגה 6 (לינולאית):** {get_val('linoleic')} גרם")
+            st.write(f"**חומצה אולאית:** {get_val('oleic')} גרם")
     
     # Vitamins
     with st.expander("💊 ויטמינים"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.write(f"**ויטמין A (יחב\"ל):** {float(food_data.get('vitamin_a_iu', 0) or 0) * factor:.1f}")
-            st.write(f"**ויטמין A (מק\"ג):** {float(food_data.get('vitamin_a_re', 0) or 0) * factor:.1f}")
-            st.write(f"**ויטמין C (מ\"ג):** {float(food_data.get('vitamin_c', 0) or 0) * factor:.2f}")
-            st.write(f"**ויטמין D (מק\"ג):** {float(food_data.get('vitamin_d', 0) or 0) * factor:.2f}")
-            st.write(f"**ויטמין E (מ\"ג):** {float(food_data.get('vitamin_e', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין A (יחב\"ל):** {get_val('vitamin_a_iu')}")
+            st.write(f"**ויטמין A (מק\"ג):** {get_val('vitamin_a_re')}")
+            st.write(f"**ויטמין C (מ\"ג):** {get_val('vitamin_c')}")
+            st.write(f"**ויטמין D (מק\"ג):** {get_val('vitamin_d')}")
+            st.write(f"**ויטמין E (מ\"ג):** {get_val('vitamin_e')}")
         with col2:
-            st.write(f"**ויטמין K (מק\"ג):** {float(food_data.get('vitamin_k', 0) or 0) * factor:.2f}")
-            st.write(f"**תיאמין B1 (מ\"ג):** {float(food_data.get('thiamin', 0) or 0) * factor:.2f}")
-            st.write(f"**ריבופלאבין B2 (מ\"ג):** {float(food_data.get('riboflavin', 0) or 0) * factor:.2f}")
-            st.write(f"**ניאצין B3 (מ\"ג):** {float(food_data.get('niacin', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין K (מק\"ג):** {get_val('vitamin_k')}")
+            st.write(f"**תיאמין B1 (מ\"ג):** {get_val('thiamin')}")
+            st.write(f"**ריבופלאבין B2 (מ\"ג):** {get_val('riboflavin')}")
+            st.write(f"**ניאצין B3 (מ\"ג):** {get_val('niacin')}")
         with col3:
-            st.write(f"**ויטמין B6 (מ\"ג):** {float(food_data.get('vitamin_b6', 0) or 0) * factor:.2f}")
-            st.write(f"**ויטמין B12 (מק\"ג):** {float(food_data.get('vitamin_b12', 0) or 0) * factor:.2f}")
-            st.write(f"**חומצה פולית (מק\"ג):** {float(food_data.get('folate', 0) or 0) * factor:.2f}")
-            st.write(f"**חומצה פנטותנית (מ\"ג):** {float(food_data.get('pantothenic_acid', 0) or 0) * factor:.2f}")
+            st.write(f"**ויטמין B6 (מ\"ג):** {get_val('vitamin_b6')}")
+            st.write(f"**ויטמין B12 (מק\"ג):** {get_val('vitamin_b12')}")
+            st.write(f"**חומצה פולית (מק\"ג):** {get_val('folate')}")
+            st.write(f"**חומצה פנטותנית (מ\"ג):** {get_val('pantothenic_acid')}")
     
     # Minerals
     with st.expander("⚗️ מינרלים"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.write(f"**סידן (מ\"ג):** {float(food_data.get('calcium', 0) or 0) * factor:.1f}")
-            st.write(f"**ברזל (מ\"ג):** {float(food_data.get('iron', 0) or 0) * factor:.2f}")
-            st.write(f"**מגנזיום (מ\"ג):** {float(food_data.get('magnesium', 0) or 0) * factor:.2f}")
-            st.write(f"**זרחן (מ\"ג):** {float(food_data.get('phosphorus', 0) or 0) * factor:.2f}")
+            st.write(f"**סידן (מ\"ג):** {get_val('calcium')}")
+            st.write(f"**ברזל (מ\"ג):** {get_val('iron')}")
+            st.write(f"**מגנזיום (מ\"ג):** {get_val('magnesium')}")
+            st.write(f"**זרחן (מ\"ג):** {get_val('phosphorus')}")
         with col2:
-            st.write(f"**אשלגן (מ\"ג):** {float(food_data.get('potassium', 0) or 0) * factor:.1f}")
-            st.write(f"**נתרן (מ\"ג):** {float(food_data.get('sodium', 0) or 0) * factor:.1f}")
-            st.write(f"**אבץ (מ\"ג):** {float(food_data.get('zinc', 0) or 0) * factor:.2f}")
-            st.write(f"**נחושת (מ\"ג):** {float(food_data.get('copper', 0) or 0) * factor:.2f}")
+            st.write(f"**אשלגן (מ\"ג):** {get_val('potassium')}")
+            st.write(f"**נתרן (מ\"ג):** {get_val('sodium')}")
+            st.write(f"**אבץ (מ\"ג):** {get_val('zinc')}")
+            st.write(f"**נחושת (מ\"ג):** {get_val('copper')}")
         with col3:
-            st.write(f"**סלניום (מק\"ג):** {float(food_data.get('selenium', 0) or 0) * factor:.2f}")
-            st.write(f"**מנגן (מ\"ג):** {float(food_data.get('manganese', 0) or 0) * factor:.2f}")
-            st.write(f"**יוד (מק\"ג):** {float(food_data.get('iodine', 0) or 0) * factor:.2f}")
+            st.write(f"**סלניום (מק\"ג):** {get_val('selenium')}")
+            st.write(f"**מנגן (מ\"ג):** {get_val('manganese')}")
+            st.write(f"**יוד (מק\"ג):** {get_val('iodine')}")
     
     # Other components
     with st.expander("📊 רכיבים נוספים"):
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"**סיבים תזונתיים (גרם):** {float(food_data.get('total_dietary_fiber', 0) or 0) * factor:.2f}")
-            st.write(f"**סוכרים (גרם):** {float(food_data.get('total_sugars', 0) or 0) * factor:.2f}")
-            st.write(f"**לחות (גרם):** {float(food_data.get('moisture', 0) or 0) * factor:.2f}")
-            st.write(f"**אלכוהול (גרם):** {float(food_data.get('alcohol', 0) or 0) * factor:.2f}")
+            st.write(f"**סיבים תזונתיים (גרם):** {get_val('total_dietary_fiber')}")
+            st.write(f"**סוכרים (גרם):** {get_val('total_sugars')}")
+            st.write(f"**לחות (גרם):** {get_val('moisture')}")
+            st.write(f"**אלכוהול (גרם):** {get_val('alcohol')}")
         with col2:
-            st.write(f"**קרוטן (מק\"ג):** {float(food_data.get('carotene', 0) or 0) * factor:.1f}")
-            st.write(f"**כולין (מ\"ג):** {float(food_data.get('choline', 0) or 0) * factor:.2f}")
-            st.write(f"**ביוטין (מק\"ג):** {float(food_data.get('biotin', 0) or 0) * factor:.2f}")
+            st.write(f"**קרוטן (מק\"ג):** {get_val('carotene')}")
+            st.write(f"**כולין (מ\"ג):** {get_val('choline')}")
+            st.write(f"**ביוטין (מק\"ג):** {get_val('biotin')}")
 
 # Sidebar for navigation
-page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם", "השוואת מוצרים"])
+page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם", "השוואת מוצרים", "מחשבון יומי"])
 
 st.title("🍎 מחשבון תזונתי")
 st.markdown("---")
@@ -563,10 +638,8 @@ elif page == "השוואת מוצרים":
                     factor = comparison_amount / 100.0
                     
                     for param in selected_params:
-                        val = food_details.get(param, 0)
-                        if pd.isna(val):
-                            val = 0
-                        product_values[param] = float(val) * factor
+                        val = food_details.get(param)
+                        product_values[param] = calculate_with_sig_figs(val, factor)
                     
                     products_data.append(product_values)
             
@@ -588,6 +661,160 @@ elif page == "השוואת מוצרים":
             
     else:
         st.info("👆 הוסף מוצרים כדי להתחיל בהשוואה")
+
+elif page == "מחשבון יומי":
+    st.title("🧮 מחשבון תזונה יומי")
+    st.write("חשב את הערכים התזונתיים הכוללים של מספר מוצרים.")
+
+    # Initialize session state for daily list
+    if 'daily_list' not in st.session_state:
+        st.session_state.daily_list = []
+
+    # Search and Add Section
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        search_term = st.text_input("חפש מוצר להוספה:", key="daily_search")
+    
+    if search_term:
+        results = search_foods(search_term)
+        if len(results) > 0:
+            product_options = {f"{row['shmmitzrach']}": row['Code'] for _, row in results.iterrows()}
+            selected_product_name = st.selectbox("בחר מוצר:", list(product_options.keys()), key="daily_select")
+            
+            if selected_product_name:
+                selected_id = product_options[selected_product_name]
+                
+                # Fetch available units
+                units_df = get_available_units(selected_id)
+                
+                col_qty, col_unit, col_add = st.columns([1, 1, 1])
+                
+                with col_qty:
+                    amount = st.number_input("כמות:", min_value=0.1, value=1.0, step=0.1, key="daily_qty")
+                
+                with col_unit:
+                    # Default unit is grams (100g usually, but here we treat 'grams' as a unit where 1 unit = 1g if we want, 
+                    # but typically the DB has units. If no units, we fallback to grams input directly?
+                    # The user wants to choose units.
+                    
+                    unit_options = {'גרם': 1.0} # Default
+                    if not units_df.empty:
+                        for _, row in units_df.iterrows():
+                            unit_options[row['shmmida']] = row['mishkal']
+                    
+                    selected_unit = st.selectbox("יחידה:", list(unit_options.keys()), key="daily_unit")
+                
+                with col_add:
+                    st.write("") # Spacer
+                    st.write("") # Spacer
+                    if st.button("הוסף לרשימה", key="daily_add_btn"):
+                        unit_weight = unit_options[selected_unit]
+                        quantity_grams = amount * unit_weight
+                        
+                        st.session_state.daily_list.append({
+                            'id': selected_id,
+                            'name': selected_product_name,
+                            'quantity': quantity_grams,
+                            'display_unit': selected_unit,
+                            'display_amount': amount
+                        })
+                        st.success(f"הוסף: {selected_product_name} ({amount} {selected_unit})")
+                        st.rerun()
+        else:
+            st.warning("לא נמצאו מוצרים")
+
+    st.divider()
+
+    # Display List and Calculate
+    if st.session_state.daily_list:
+        st.subheader("📋 רשימת מוצרים")
+        
+        # Display list with remove buttons
+        for i, item in enumerate(st.session_state.daily_list):
+            col_name, col_qty, col_remove = st.columns([3, 1, 1])
+            with col_name:
+                st.write(f"**{i+1}. {item['name']}**")
+            with col_qty:
+                if 'display_unit' in item:
+                    st.write(f"{item['display_amount']} {item['display_unit']} ({item['quantity']:.1f} גרם)")
+                else:
+                    st.write(f"{item['quantity']} גרם")
+            with col_remove:
+                if st.button("הסר", key=f"remove_{i}"):
+                    st.session_state.daily_list.pop(i)
+                    st.rerun()
+        
+        st.divider()
+        
+        # Parameter Selection
+        st.subheader("📊 סיכום ערכים תזונתיים")
+        
+        # Use global fields mapping
+        calc_fields = FIELDS_MAPPING
+        
+        # Default selected parameters (Macronutrients)
+        default_params = ['food_energy', 'protein', 'carbohydrates', 'total_fat']
+        default_selected = [k for k in calc_fields.keys() if k in default_params]
+        
+        col_params1, col_params2 = st.columns([3, 1])
+        with col_params2:
+             select_all = st.checkbox("בחר הכל", key="daily_select_all")
+        
+        with col_params1:
+            if select_all:
+                selected_params = st.multiselect(
+                    "בחר פרמטרים לסיכום:",
+                    options=list(calc_fields.keys()),
+                    format_func=lambda x: calc_fields[x],
+                    default=list(calc_fields.keys()),
+                    key="daily_params"
+                )
+            else:
+                selected_params = st.multiselect(
+                    "בחר פרמטרים לסיכום:",
+                    options=list(calc_fields.keys()),
+                    format_func=lambda x: calc_fields[x],
+                    default=default_selected,
+                    key="daily_params"
+                )
+
+        if selected_params:
+            # Calculate totals
+            totals = {param: 0.0 for param in selected_params}
+            
+            for item in st.session_state.daily_list:
+                food_data = get_food_details(item['id'])
+                if food_data is not None:
+                    factor = item['quantity'] / 100.0
+                    for param in selected_params:
+                        val = food_data.get(param)
+                        # Calculate contribution with sig figs
+                        contribution = calculate_with_sig_figs(val, factor)
+                        totals[param] += contribution
+            
+            # Display results
+            # Create a nice display for the results
+            st.write("### סה\"כ יומי:")
+            
+            # Group results by category for better readability? 
+            # Or just a simple list/table. Let's do a dataframe for clarity and exportability.
+            
+            results_data = []
+            for param in selected_params:
+                results_data.append({
+                    "פרמטר": calc_fields[param],
+                    "סה\"כ": f"{totals[param]:.2f}"
+                })
+            
+            df_results = pd.DataFrame(results_data)
+            
+            # Calculate dynamic height
+            res_table_height = (len(df_results) + 1) * 35 + 3
+            st.dataframe(df_results, use_container_width=True, height=res_table_height, hide_index=True)
+            
+    else:
+        st.info("הוסף מוצרים לרשימה כדי לראות סיכום תזונתי.")
 
 
 # Footer
