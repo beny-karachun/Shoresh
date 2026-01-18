@@ -1,6 +1,9 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import sqlite3
 import pandas as pd
+import base64
+import os
 
 # Page configuration
 st.set_page_config(page_title="מחשבון תזונתי", page_icon="🍎", layout="wide")
@@ -14,6 +17,14 @@ def get_connection():
 
 # Global Constants
 # Global Constants
+def get_base64_image(image_path):
+    """Read image file and return base64 string"""
+    try:
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except Exception as e:
+        return None
+
 FIELDS_MAPPING = {
     # Macronutrients
     'food_energy': 'קלוריות (קק"ל)',
@@ -267,6 +278,18 @@ def get_available_units(food_code):
     df = pd.read_sql_query(query, conn, params=(food_code,))
     return df
 
+def get_recipe_details(recipe_code):
+    """Get components of a recipe"""
+    conn = get_connection()
+    query = """
+    SELECT r.*, p.shmmitzrach
+    FROM recipes r
+    LEFT JOIN products p ON r.mitzbsisi = p.Code
+    WHERE r.mmitzrach = ?
+    """
+    df = pd.read_sql_query(query, conn, params=(recipe_code,))
+    return df
+
 def display_all_nutrition(food_data, factor=1.0):
     """Display all nutritional parameters"""
     
@@ -352,7 +375,7 @@ def display_all_nutrition(food_data, factor=1.0):
             st.write(f"**ביוטין (מק\"ג):** {get_val('biotin')}")
 
 # Sidebar for navigation
-page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם", "השוואת מוצרים", "מחשבון יומי"])
+page = st.sidebar.radio("בחר מצב:", ["חיפוש רגיל", "חיפוש מתקדם", "השוואת מוצרים", "מחשבון יומי", "מחשבון מתכונים", "עיצוב תווית"])
 
 st.title("🍎 מחשבון תזונתי")
 st.markdown("---")
@@ -796,8 +819,152 @@ elif page == "מחשבון יומי":
             # Display results
             # Create a nice display for the results
             st.write("### סה\"כ יומי:")
+            # ... (rest of daily calculator logic)
             
-            # Group results by category for better readability? 
+            # Display summary table
+            summary_df = pd.DataFrame([totals])
+            st.dataframe(summary_df, use_container_width=True)
+
+elif page == "מחשבון מתכונים":
+    st.title("👨‍🍳 מחשבון מתכונים")
+    st.write("צפה במרכיבי מתכונים וערכי ספיחת שמן")
+
+    # Search for recipe
+    search_term = st.text_input("חפש מתכון:", placeholder="לדוגמה: שניצל...")
+    
+    if search_term:
+        # We search in products, but filter for those that HAVE a recipe
+        conn = get_connection()
+        query = """
+        SELECT DISTINCT p.Code, p.shmmitzrach 
+        FROM products p
+        JOIN recipes r ON p.Code = r.mmitzrach
+        WHERE p.shmmitzrach LIKE ?
+        LIMIT 50
+        """
+        results = pd.read_sql_query(query, conn, params=(f'%{search_term}%',))
+        
+        if not results.empty:
+            recipe_options = {row['shmmitzrach']: row['Code'] for _, row in results.iterrows()}
+            selected_recipe = st.selectbox("בחר מתכון:", list(recipe_options.keys()))
+            
+            if selected_recipe:
+                code = recipe_options[selected_recipe]
+                
+                # Get details
+                details = get_recipe_details(code)
+                
+                if not details.empty:
+                    st.subheader(f"רכיבים ל- {selected_recipe}")
+                    
+                    # Calculate totals
+                    total_weight = details['mishkal'].sum()
+                    
+                    # Prepare display dataframe
+                    display_df = details[['shmmitzrach', 'mishkal', 'ahuz', 'retention']].copy()
+                    display_df.columns = ['רכיב', 'משקל (גרם)', 'אחוז ספיחה/איבוד (%)', 'קוד Retention']
+                    
+                    st.dataframe(display_df, use_container_width=True)
+                    
+                    st.info(f"משקל כולל מחושב: {total_weight:.1f} גרם")
+                    
+                    st.markdown("---")
+                    st.write("### 📉 חישוב ערכים סופיים (עם איבוד נוזלים)")
+                    
+                    col_loss, col_final = st.columns(2)
+                    with col_loss:
+                         liquid_loss_pct = st.number_input("אחוז איבוד נוזלים (%)", min_value=0.0, max_value=90.0, value=0.0, step=1.0, help="ראה טבלה 7 בחוברת ההדרכה")
+                    
+                    # Calculate Final Weight and Factor
+                    concentration_factor = 1.0
+                    final_weight = total_weight
+                    
+                    if liquid_loss_pct > 0:
+                        final_weight = total_weight * (1 - liquid_loss_pct / 100.0)
+                        concentration_factor = 1 / (1 - liquid_loss_pct / 100.0)
+                    
+                    with col_final:
+                        st.metric("משקל סופי (אחרי בישול)", f"{final_weight:.1f} גרם", delta=f"{final_weight - total_weight:.1f} גרם (איבוד)")
+                        if liquid_loss_pct > 0:
+                            st.caption(f"פקטור ריכוז: x{concentration_factor:.2f}")
+
+                    # Calculate Final Nutrition per 100g (Theoretical)
+                    # Logic: Sum(Raw Nutrients) / Final Weight * 100
+                    
+                    if st.button("🧮 חשב ערכים תזונתיים ל-100 גרם (מוצר מוגמר)"):
+                         # 1. Sum raw nutrients
+                        raw_totals = {}
+                        
+                        # We need to iterate over all ingredients and sum their nutrients
+                        # This requires fetching food details for each ingredient code
+                        # We can do this efficiently?
+                        
+                        valid_ingredients = []
+                        for _, row in details.iterrows():
+                             ing_code = row['mitzbsisi']
+                             ing_weight = row['mishkal']
+                             
+                             food_data = get_food_details(ing_code)
+                             if food_data is not None:
+                                 valid_ingredients.append({'data': food_data, 'weight': ing_weight})
+                        
+                        if valid_ingredients:
+                            # Use first ingredient keys as schema
+                            all_params = list(FIELDS_MAPPING.keys())
+                            for param in all_params:
+                                total_val = 0
+                                for item in valid_ingredients:
+                                    val = item['data'].get(param)
+                                    if val is not None:
+                                         try:
+                                             val_float = float(val)
+                                             total_val += val_float * (item['weight'] / 100.0) # Nutrient amount in this ingredient
+                                         except:
+                                             pass
+                                raw_totals[param] = total_val
+                                
+                            # 2. Divide by Final Weight and multiply by 100 to get per 100g
+                            final_100g_values = {}
+                            for param, total_val in raw_totals.items():
+                                if final_weight > 0:
+                                    final_100g_values[param] = (total_val / final_weight) * 100.0
+                                else:
+                                    final_100g_values[param] = 0
+                                    
+                            st.write("#### ערכים תזונתיים ל-100 גרם (מוצר מוגמר)")
+                            display_all_nutrition(final_100g_values, factor=1.0) # Factor 1.0 because values are already per 100g
+                        else:
+                            st.warning("לא סופקו נתונים תזונתיים למרכיבים")
+
+                    
+                    # Highlight Oil Absorption
+                    oil_rows = details[details['ahuz'].notna() & (details['ahuz'] > 0)]
+                    
+                    if not oil_rows.empty:
+                        st.markdown("### 🛢️ נתוני ספיחת שמן")
+                        for _, row in oil_rows.iterrows():
+                            # Heuristic: if name contains "oil" or "fat"
+                            is_probably_oil = 'שמן' in str(row['shmmitzrach'])
+                            
+                            icon = "💧" if not is_probably_oil else "🛢️"
+                            msg_type = "איבוד נוזלים" if not is_probably_oil else "ספיחת שמן"
+                            
+                            st.warning(f"**{row['shmmitzrach']}**: {msg_type} {row['ahuz']:.3f}% (משקל נוכחי: {row['mishkal']} גרם)")
+                            
+                            # Calculate theoretical
+                            # Assuming factor applies to the MAIN ingredient (max weight in recipe usually)
+                            # or Sum of all others?
+                            # For Schnitzel (815), we saw it matches Main Ingredient (500g) * 6.9% = 34.5g
+                            
+                            main_ing = details.loc[details['mishkal'].idxmax()]
+                            if main_ing['mitzbsisi'] != row['mitzbsisi']: # Don't compare to self
+                                theory = main_ing['mishkal'] * (row['ahuz'] / 100.0)
+                                st.caption(f"בדיקה: {row['ahuz']:.3f}% מ-{main_ing['shmmitzrach']} ({main_ing['mishkal']} גרם) = {theory:.1f} גרם")
+
+                else:
+                    st.error("לא נמצאו רכיבים למתכון זה")
+        else:
+            st.warning("לא נמצאו מתכונים תואמים")
             # Or just a simple list/table. Let's do a dataframe for clarity and exportability.
             
             results_data = []
@@ -815,6 +982,599 @@ elif page == "מחשבון יומי":
             
     else:
         st.info("הוסף מוצרים לרשימה כדי לראות סיכום תזונתי.")
+
+
+elif page == "עיצוב תווית":
+    st.title("🏷️ עיצוב תווית למוצר")
+    st.write("יצירת תווית מוצר לפי תקן 1145 כולל סימון אדום")
+
+    # --- Step 1: Data Source ---
+    st.header("1. פרטי המוצר")
+    
+    source_type = st.radio("מקור הנתונים:", ["מתכון קיים", "מוצר בודד מהמאגר", "הזנה ידנית"], horizontal=True)
+    
+    label_data = {
+        'name': '',
+        'ingredients': '',
+        'nutrition': {}
+    }
+    
+    # Defaults
+    for k in FIELDS_MAPPING.keys():
+        label_data['nutrition'][k] = 0.0
+    
+    if source_type == "מתכון קיים":
+        search_recipe = st.text_input("חפש מתכון:", placeholder="שניצל...")
+        if search_recipe:
+            conn = get_connection()
+            query = """
+            SELECT DISTINCT p.Code, p.shmmitzrach 
+            FROM products p
+            JOIN recipes r ON p.Code = r.mmitzrach
+            WHERE p.shmmitzrach LIKE ?
+            LIMIT 20
+            """
+            results = pd.read_sql_query(query, conn, params=(f'%{search_recipe}%',))
+            
+            if not results.empty:
+                recipe_opts = {row['shmmitzrach']: row['Code'] for _, row in results.iterrows()}
+                sel_recipe = st.selectbox("בחר מתוך התוצאות:", list(recipe_opts.keys()))
+                
+                if sel_recipe:
+                    code = recipe_opts[sel_recipe]
+                    label_data['name'] = sel_recipe
+                    
+                    # Get ingredients
+                    details = get_recipe_details(code)
+                    if not details.empty:
+                        # Sort by weight descending
+                        details = details.sort_values('mishkal', ascending=False)
+                        # Build ingredients string
+                        ing_list = details['shmmitzrach'].tolist()
+                        label_data['ingredients'] = ", ".join(ing_list)
+                        
+                        # Get nutrition
+                        prod_details = get_food_details(code)
+                        if prod_details is not None:
+                             for key in FIELDS_MAPPING.keys():
+                                 label_data['nutrition'][key] = prod_details.get(key, 0)
+    
+    elif source_type == "מוצר בודד מהמאגר":
+        st.caption("הרכב מוצר ממספר רכיבים. המערכת תחשב את הערכים הסופיים ותסדר את רשימת הרכיבים.")
+        
+        # Initialize ingredients list if not present
+        if 'label_ingredients' not in st.session_state:
+            st.session_state.label_ingredients = []
+
+        # Add Product Section
+        col_search, col_qty, col_unit, col_add = st.columns([3, 1, 1, 1])
+        
+        with col_search:
+            search_prod = st.text_input("חפש רכיב להוספה:", placeholder="קמח, סוכר, ביצים...", key="label_search_prod")
+            
+        selected_code = None
+        selected_name = None
+        
+        if search_prod:
+            results = search_foods(search_prod)
+            if not results.empty:
+                prod_opts = {row['shmmitzrach']: row['Code'] for _, row in results.iterrows()}
+                selected_name = st.selectbox("בחר רכיב:", list(prod_opts.keys()), key="label_sel_prod")
+                if selected_name:
+                    selected_code = prod_opts[selected_name]
+
+        if selected_code:
+            units_df = get_available_units(selected_code)
+            
+            with col_qty:
+                amount = st.number_input("כמות:", min_value=0.1, value=100.0, step=10.0, key="label_amount")
+            
+            with col_unit:
+                unit_options = {'גרם': 1.0}
+                if not units_df.empty:
+                    for _, row in units_df.iterrows():
+                        unit_options[row['shmmida']] = row['mishkal']
+                selected_unit = st.selectbox("יחידה:", list(unit_options.keys()), key="label_unit")
+            
+            with col_add:
+                st.write("") # Spacer
+                st.write("") 
+                if st.button("➕ הוסף", key="label_add_btn"):
+                    weight_in_grams = amount * unit_options[selected_unit]
+                    st.session_state.label_ingredients.append({
+                        'code': selected_code,
+                        'name': selected_name,
+                        'weight': weight_in_grams,
+                        'display_amount': amount,
+                        'display_unit': selected_unit
+                    })
+                    st.rerun()
+
+        # Display Ingredients List
+        if st.session_state.label_ingredients:
+            st.write("---")
+            st.markdown("###### 🛒 רכיבים שנבחרו:")
+            
+            total_mix_weight = 0
+            
+            for i, item in enumerate(st.session_state.label_ingredients):
+                col1, col2, col3 = st.columns([4, 2, 1])
+                with col1:
+                    st.write(f"**{i+1}. {item['name']}**")
+                with col2:
+                    st.write(f"{item['display_amount']} {item['display_unit']} ({item['weight']:.1f} גרם)")
+                with col3:
+                    if st.button("🗑️", key=f"label_del_{i}"):
+                        st.session_state.label_ingredients.pop(i)
+                        st.rerun()
+                
+                total_mix_weight += item['weight']
+            
+            st.info(f"⚖️ משקל כולל של התערובת: {total_mix_weight:.1f} גרם")
+            
+            # Update label_data
+            # 1. Sort ingredients by weight descending
+            sorted_ingredients = sorted(st.session_state.label_ingredients, key=lambda x: x['weight'], reverse=True)
+            label_data['ingredients'] = ", ".join([item['name'] for item in sorted_ingredients])
+            
+            # Default name to first ingredient or mix
+            if not label_data['name'] and sorted_ingredients:
+                label_data['name'] = f"תערובת {sorted_ingredients[0]['name']}..."
+
+            # 2. Calculate Nutrition per 100g of MIX
+            if total_mix_weight > 0:
+                mix_nutrition = {k: 0.0 for k in FIELDS_MAPPING.keys()}
+                
+                for item in st.session_state.label_ingredients:
+                    prod_details = get_food_details(item['code'])
+                    if prod_details is not None:
+                        # Convert nutrition (per 100g) to actual amount in item
+                        item_factor = item['weight'] / 100.0
+                        for k in FIELDS_MAPPING.keys():
+                            val = prod_details.get(k, 0)
+                            try:
+                                val = float(val)
+                            except:
+                                val = 0
+                            mix_nutrition[k] += val * item_factor
+                
+                # Normalize to 100g of final mix
+                final_factor = 100.0 / total_mix_weight
+                for k in FIELDS_MAPPING.keys():
+                    label_data['nutrition'][k] = mix_nutrition[k] * final_factor
+
+    # --- Step 2: Refine Data ---
+    st.markdown("---")
+    st.header("2. עריכת נתונים")
+    
+    col_meta1, col_meta2 = st.columns(2)
+    with col_meta1:
+        final_name = st.text_input("שם מוצר (כפי שיופיע על התווית):", value=label_data['name'])
+        is_liquid = st.checkbox("האם המוצר נוזלי? (משפיע על ספים למדבקות אדומות)")
+    with col_meta2:
+         marketing_text = st.text_area("טקסט שיווקי / תיאור:", height=100)
+         
+    final_ingredients = st.text_area("רשימת רכיבים:", value=label_data.get('ingredients', ''), height=100)
+    
+    st.subheader("ערכים תזונתיים (ל-100 גרם/מל)")
+    
+    mandatory_fields = [
+        'food_energy', 'total_fat', 'saturated_fat', 'trans_fatty_acids', 
+        'cholesterol', 'sodium', 'carbohydrates', 'total_sugars', 
+        'total_dietary_fiber', 'protein'
+    ]
+    
+    edited_nutrition = {}
+    
+    cols = st.columns(4)
+    for i, field in enumerate(mandatory_fields):
+        with cols[i % 4]:
+            val = label_data.get('nutrition', {}).get(field, 0)
+            if val is None: val = 0.0
+            edited_nutrition[field] = st.number_input(
+                FIELDS_MAPPING.get(field, field), 
+                value=float(val), 
+                step=0.1, 
+                format="%.1f"
+            )
+
+    # --- Step 2.5: Fluid Loss and Nutrient Composition ---
+    st.markdown("---")
+    st.header("2.5 הרכב תזונתי מלא")
+    
+    col_fluid, col_weight = st.columns(2)
+    
+    with col_fluid:
+        fluid_loss_pct = st.number_input(
+            "אחוז איבוד נוזלים (%):",
+            min_value=0.0,
+            max_value=99.9,
+            value=0.0,
+            step=0.1,
+            format="%.1f",
+            help="אחוז הנוזלים שאבדו בתהליך הבישול/ייצור. ריכוז הרכיבים התזונתיים יותאם בהתאם."
+        )
+    
+    with col_weight:
+        display_weight = st.number_input(
+            "משקל להצגה (גרם):",
+            min_value=1.0,
+            max_value=10000.0,
+            value=100.0,
+            step=10.0,
+            format="%.1f",
+            help="הערכים יחושבו עבור משקל זה"
+        )
+    
+    # Calculate adjustment factors
+    fluid_loss_factor = 1.0 - (fluid_loss_pct / 100.0)
+    weight_factor = display_weight / 100.0
+    combined_factor = fluid_loss_factor * weight_factor
+    
+    if fluid_loss_pct > 0:
+        st.info(f"⚠️ עם איבוד נוזלים של {fluid_loss_pct:.1f}%, כל הערכים מופחתים ב-{fluid_loss_pct:.1f}%")
+    
+    # Get all nutrition values with adjustments
+    def get_adjusted_val(field):
+        val = edited_nutrition.get(field, label_data.get('nutrition', {}).get(field, 0))
+        if val is None:
+            val = 0
+        try:
+            return float(val) * combined_factor
+        except:
+            return 0
+    
+    # Define nutrient categories
+    nutrient_categories = {
+        "מקרו-נוטריינטים": [
+            ('food_energy', 'אנרגיה', 'קק"ל'),
+            ('protein', 'חלבון', 'גרם'),
+            ('total_fat', 'שומן כולל', 'גרם'),
+            ('carbohydrates', 'פחמימות', 'גרם'),
+            ('total_dietary_fiber', 'סיבים', 'גרם'),
+            ('total_sugars', 'סוכרים', 'גרם'),
+            ('alcohol', 'אלכוהול', 'גרם'),
+            ('moisture', 'לחות', 'גרם'),
+        ],
+        "שומנים": [
+            ('saturated_fat', 'שומן רווי', 'גרם'),
+            ('mono_unsaturated_fat', 'חד בלתי רווי', 'גרם'),
+            ('poly_unsaturated_fat', 'רב בלתי רווי', 'גרם'),
+            ('trans_fatty_acids', 'טרנס', 'גרם'),
+            ('cholesterol', 'כולסטרול', 'מ"ג'),
+            ('linoleic', 'אומגה 6', 'גרם'),
+            ('linolenic', 'אומגה 3', 'גרם'),
+            ('oleic', 'אולאית', 'גרם'),
+            ('docosahexanoic', 'DHA', 'גרם'),
+            ('eicosapentaenoic', 'EPA', 'גרם'),
+            ('arachidonic', 'ארכידונית', 'גרם'),
+        ],
+        "ויטמינים": [
+            ('vitamin_a_iu', 'ויטמין A', 'יחב"ל'),
+            ('vitamin_a_re', 'ויטמין A', 'מק"ג RE'),
+            ('carotene', 'קרוטן', 'מק"ג'),
+            ('vitamin_e', 'ויטמין E', 'מ"ג'),
+            ('vitamin_c', 'ויטמין C', 'מ"ג'),
+            ('thiamin', 'B1', 'מ"ג'),
+            ('riboflavin', 'B2', 'מ"ג'),
+            ('niacin', 'B3', 'מ"ג'),
+            ('vitamin_b6', 'B6', 'מ"ג'),
+            ('folate', 'פולית', 'מק"ג'),
+            ('vitamin_b12', 'B12', 'מק"ג'),
+            ('vitamin_d', 'ויטמין D', 'מק"ג'),
+            ('vitamin_k', 'ויטמין K', 'מק"ג'),
+            ('pantothenic_acid', 'פנטותנית', 'מ"ג'),
+            ('biotin', 'ביוטין', 'מק"ג'),
+            ('choline', 'כולין', 'מ"ג'),
+        ],
+        "מינרלים": [
+            ('calcium', 'סידן', 'מ"ג'),
+            ('iron', 'ברזל', 'מ"ג'),
+            ('magnesium', 'מגנזיום', 'מ"ג'),
+            ('phosphorus', 'זרחן', 'מ"ג'),
+            ('potassium', 'אשלגן', 'מ"ג'),
+            ('sodium', 'נתרן', 'מ"ג'),
+            ('zinc', 'אבץ', 'מ"ג'),
+            ('copper', 'נחושת', 'מ"ג'),
+            ('manganese', 'מנגן', 'מ"ג'),
+            ('selenium', 'סלניום', 'מק"ג'),
+            ('iodine', 'יוד', 'מק"ג'),
+        ],
+        "חומצות אמינו": [
+            ('isoleucine', 'איזולאוצין', 'גרם'),
+            ('leucine', 'לאוצין', 'גרם'),
+            ('valine', 'ואלין', 'גרם'),
+            ('lysine', 'ליזין', 'גרם'),
+            ('methionine', 'מתיונין', 'גרם'),
+            ('phenylalanine', 'פנילאלנין', 'גרם'),
+            ('threonine', 'תראונין', 'גרם'),
+            ('tryptophan', 'טריפטופן', 'גרם'),
+            ('histidine', 'היסטידין', 'גרם'),
+            ('arginine', 'ארגינין', 'גרם'),
+        ],
+        "אחרים": [
+            ('fructose', 'פרוקטוז', 'גרם'),
+            ('sugar_alcohols', 'רב כהלים', 'גרם'),
+        ],
+    }
+    
+    # Build compact multi-column HTML table
+    st.markdown(f"#### טבלת הרכב תזונתי ל-{display_weight:.0f} גרם")
+    
+    table_css = """
+    <style>
+    .nutrient-table-container {
+        direction: rtl;
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+    }
+    .nutrient-category {
+        background-color: #e8f4f8;
+        font-weight: bold;
+        padding: 6px 8px;
+        margin-top: 8px;
+        border-radius: 4px;
+        color: #1a5276;
+    }
+    .nutrient-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+        padding: 4px 0;
+    }
+    .nutrient-item {
+        background-color: #f9f9f9;
+        padding: 4px 6px;
+        border-radius: 3px;
+        display: flex;
+        justify-content: space-between;
+        border: 1px solid #eee;
+    }
+    .nutrient-name {
+        color: #333;
+    }
+    .nutrient-value {
+        color: #2874a6;
+        font-weight: 500;
+    }
+    </style>
+    """
+    
+    html_content = [table_css, '<div class="nutrient-table-container">']
+    
+    for category_name, nutrients in nutrient_categories.items():
+        html_content.append(f'<div class="nutrient-category">{category_name}</div>')
+        html_content.append('<div class="nutrient-grid">')
+        
+        for field, display_name, unit in nutrients:
+            val = get_adjusted_val(field)
+            # Format value based on magnitude
+            if val >= 100:
+                formatted_val = f"{val:.0f}"
+            elif val >= 10:
+                formatted_val = f"{val:.1f}"
+            elif val >= 1:
+                formatted_val = f"{val:.2f}"
+            else:
+                formatted_val = f"{val:.3f}"
+            
+            html_content.append(f'''
+                <div class="nutrient-item">
+                    <span class="nutrient-name">{display_name}</span>
+                    <span class="nutrient-value">{formatted_val} {unit}</span>
+                </div>
+            ''')
+        
+        html_content.append('</div>')
+    
+    html_content.append('</div>')
+    
+    # Use components.html for proper HTML rendering
+    full_html = "".join(html_content)
+    # Calculate height based on number of categories (approx 40px per row + headers)
+    num_categories = len(nutrient_categories)
+    total_items = sum(len(nutrients) for nutrients in nutrient_categories.values())
+    estimated_height = (num_categories * 40) + (total_items // 4 * 30) + 50
+    components.html(full_html, height=estimated_height, scrolling=True)
+
+    # --- Step 3: Additional Info ---
+    st.markdown("---")
+    st.header("3. פרטים נוספים")
+    col_add1, col_add2, col_add3 = st.columns(3)
+    
+    with col_add1:
+        storage = st.text_input("תנאי אחסון:", value="יש לשמור במקום קריר ויבש")
+    with col_add2:
+        manufacturer = st.text_input("יצרן/משווק:", value="מיוצר ע\"י...")
+    with col_add3:
+        expiry = st.text_input("לשימוש עד", value="עדיף להשתמש לפני...")
+
+    # --- Step 4: Red Label Logic ---
+    # Thresholds (grams per 100g/ml)
+    THRESHOLDS_SOLID = {'sodium': 400, 'total_sugars': 10, 'saturated_fat': 4}
+    THRESHOLDS_LIQUID = {'sodium': 300, 'total_sugars': 5, 'saturated_fat': 3}
+    
+    current_thresholds = THRESHOLDS_LIQUID if is_liquid else THRESHOLDS_SOLID
+    
+    red_labels = []
+    
+    # Check Sodium
+    na_val = edited_nutrition.get('sodium', 0)
+    if na_val > current_thresholds['sodium']:
+        red_labels.append(('נתרן', 'גבוה בנתרן'))
+        
+    # Check Sugar
+    sugar_val = edited_nutrition.get('total_sugars', 0)
+    if sugar_val > current_thresholds['total_sugars']:
+        red_labels.append(('סוכר', 'גבוה בסוכר'))
+        
+    # Check Sat Fat
+    fat_val = edited_nutrition.get('saturated_fat', 0)
+    if fat_val > current_thresholds['saturated_fat']:
+        red_labels.append(('שומן רווי', 'גבוה בשומן רווי'))
+
+    # --- Step 5: Preview ---
+    st.markdown("---")
+    st.header("4. תצוגה מקדימה")
+    
+    label_css = """
+    <style>
+    .food-label {
+        border: 2px solid #000;
+        padding: 20px;
+        background: white;
+        color: black;
+        font-family: 'Arial', sans-serif;
+        direction: rtl;
+        max_width: 500px;
+        margin: 0 auto;
+        box-shadow: 5px 5px 15px rgba(0,0,0,0.1);
+    }
+    .label-header {
+        text-align: center;
+        border-bottom: 2px solid #000;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+    .label-title {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 0;
+    }
+    .label-marketing {
+        font-style: italic;
+        margin-top: 5px;
+    }
+    .red-labels-container {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin: 15px 0;
+    }
+    .red-label-img {
+        width: 80px;
+        height: auto;
+    }
+    .nutrition-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 14px;
+    }
+    .nutrition-table th, .nutrition-table td {
+        border-bottom: 1px solid #ddd;
+        padding: 4px;
+        text-align: right;
+    }
+    .nutrition-table th {
+        font-weight: bold;
+    }
+    .nutrition-header {
+        background-color: #f5f5f5;
+        font-weight: bold;
+        padding: 5px;
+        margin-top: 10px;
+        border: 1px solid #ddd;
+    }
+    .ingredients-section {
+        margin-top: 15px;
+        font-size: 13px;
+    }
+    .footer-info {
+        margin-top: 15px;
+        font-size: 12px;
+        border-top: 1px solid #000;
+        padding-top: 10px;
+    }
+    </style>
+    """
+    
+    # Construct HTML parts (using list to avoid indentation issues)
+    html_parts = []
+    html_parts.append(label_css)
+    html_parts.append('<div class="food-label">')
+    
+    # Header
+    html_parts.append('<div class="label-header">')
+    html_parts.append(f'<h1 class="label-title">{final_name}</h1>')
+    if marketing_text:
+        html_parts.append(f'<div class="label-marketing">{marketing_text}</div>')
+    html_parts.append('</div>')
+    
+    # Red Labels
+    if red_labels:
+        html_parts.append('<div class="red-labels-container">')
+        for label_type, label_text in red_labels:
+            img_filename = None
+            if label_type == 'נתרן': 
+                img_filename = "highsaltlabel.png"
+            elif label_type == 'סוכר': 
+                img_filename = "highsugarlaber.png" # Note: typo in filename from user
+            elif label_type == 'שומן רווי': 
+                img_filename = "highsaturatedfatlabel.png"
+            
+            if img_filename:
+                # Assuming labels folder is in the same directory as app.py
+                img_path = os.path.join("labels", img_filename)
+                b64_img = get_base64_image(img_path)
+                
+                if b64_img:
+                    html_parts.append(f'<img src="data:image/png;base64,{b64_img}" class="red-label-img" alt="{label_text}">')
+                else:
+                    # Fallback if image not found
+                    html_parts.append(f'<div style="color: red; font-weight: bold; border: 1px solid red; padding: 5px;">{label_text}</div>')
+            
+        html_parts.append('</div>')
+        
+    # Nutrition Table
+    unit_label = 'מל' if is_liquid else 'גרם'
+    html_parts.append(f'<div class="nutrition-header">ערכים תזונתיים ל-100 {unit_label}</div>')
+    html_parts.append('<table class="nutrition-table">')
+    html_parts.append(f'<thead><tr><th>סימון תזונתי</th><th>ל-100 {unit_label}</th></tr></thead>')
+    html_parts.append('<tbody>')
+    
+    def fmt_val(v): return f"{v:.1f}"
+    
+    # Generate Rows
+    rows = []
+    rows.append(f"<tr><td>אנרגיה (קלוריות)</td><td>{int(edited_nutrition.get('food_energy', 0))}</td></tr>")
+    rows.append(f"<tr><td>סך השומנים (גרם)</td><td>{fmt_val(edited_nutrition.get('total_fat', 0))}</td></tr>")
+    rows.append(f"<tr><td style='padding-right: 20px;'>מתוכם: חומצות שומן רוויות (גרם)</td><td>{fmt_val(edited_nutrition.get('saturated_fat', 0))}</td></tr>")
+    
+    trans = edited_nutrition.get('trans_fatty_acids', 0)
+    trans_str = "< 0.5" if trans < 0.5 and trans > 0 else fmt_val(trans)
+    rows.append(f"<tr><td style='padding-right: 20px;'>חומצות שומן טרנס (גרם)</td><td>{trans_str}</td></tr>")
+    
+    rows.append(f"<tr><td style='padding-right: 20px;'>כולסטרול (מ\"ג)</td><td>{fmt_val(edited_nutrition.get('cholesterol', 0))}</td></tr>")
+    rows.append(f"<tr><td>נתרן (מ\"ג)</td><td>{fmt_val(edited_nutrition.get('sodium', 0))}</td></tr>")
+    rows.append(f"<tr><td>סך הפחמימות (גרם)</td><td>{fmt_val(edited_nutrition.get('carbohydrates', 0))}</td></tr>")
+    
+    sugs = edited_nutrition.get('total_sugars', 0)
+    rows.append(f"<tr><td style='padding-right: 20px;'>מתוכן: סוכרים (גרם)</td><td>{fmt_val(sugs)}</td></tr>")
+    rows.append(f"<tr><td style='padding-right: 20px;'>כפיות סוכר</td><td>{fmt_val(sugs / 4.0)}</td></tr>")
+    
+    rows.append(f"<tr><td>סיבים תזונתיים (גרם)</td><td>{fmt_val(edited_nutrition.get('total_dietary_fiber', 0))}</td></tr>")
+    rows.append(f"<tr><td>חלבונים (גרם)</td><td>{fmt_val(edited_nutrition.get('protein', 0))}</td></tr>")
+    
+    html_parts.extend(rows)
+    html_parts.append('</tbody></table>')
+    
+    # Ingredients & Footer
+    html_parts.append(f'<div class="ingredients-section"><strong>רכיבים:</strong> {final_ingredients}</div>')
+    
+    html_parts.append('<div class="footer-info">')
+    html_parts.append(f'<div><strong>תנאי אחסון:</strong> {storage}</div>')
+    html_parts.append(f'<div><strong>יצרן:</strong> {manufacturer}</div>')
+    html_parts.append(f'<div><strong>תוקף:</strong> {expiry}</div>')
+    html_parts.append('</div>')
+    
+    html_parts.append('</div>') # Close food-label
+    
+    label_html = "".join(html_parts) # Join with empty string, checking spacing manually if needed, or join with \n
+    st.markdown(label_html, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    st.info("💡 ניתן להדפיס תווית זו ע\"י שימוש בפונקציית ההדפסה של הדפדפן (Ctrl+P)")
 
 
 # Footer

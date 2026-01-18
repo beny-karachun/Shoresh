@@ -1,0 +1,1 @@
+sqlcmd -sLAPTOP-DD82PJ5N 

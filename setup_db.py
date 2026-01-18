@@ -53,6 +53,9 @@ def setup_database():
         print("\n=== Reading Conversions File ===")
         conversions_df = read_csv_with_encoding('moh_yehidot_mida_lemitzrachim.csv')
         
+        print("\n=== Reading Recipes File ===")
+        recipes_df = read_csv_with_encoding('moh_matkonim_11.7.2022.csv')
+        
         # Create tables and import data
         print("\n=== Creating Products Table ===")
         products_df.to_sql('products', conn, if_exists='replace', index=False)
@@ -65,6 +68,10 @@ def setup_database():
         print("\n=== Creating Conversions Table ===")
         conversions_df.to_sql('conversions', conn, if_exists='replace', index=False)
         print(f"Imported {len(conversions_df)} conversion records")
+
+        print("\n=== Creating Recipes Table ===")
+        recipes_df.to_sql('recipes', conn, if_exists='replace', index=False)
+        print(f"Imported {len(recipes_df)} recipe records")
         
         # Create indexes for better performance
         print("\n=== Creating Indexes ===")
@@ -72,6 +79,8 @@ def setup_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_units_smlmida ON units(smlmida)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_conv_mmitzrach ON conversions(mmitzrach)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_conv_mida ON conversions(mida)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_recipes_mmitzrach ON recipes(mmitzrach)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_recipes_mitzbsisi ON recipes(mitzbsisi)")
         
         conn.commit()
         
@@ -84,6 +93,7 @@ def setup_database():
         print(f"Products columns: {list(products_df.columns[:5])}...")
         print(f"Units columns: {list(units_df.columns)}")
         print(f"Conversions columns: {list(conversions_df.columns)}")
+        print(f"Recipes columns: {list(recipes_df.columns)}")
         
     except Exception as e:
         print(f"Error during database setup: {e}")
