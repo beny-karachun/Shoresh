@@ -991,7 +991,7 @@ elif page == "עיצוב תווית":
     # --- Step 1: Data Source ---
     st.header("1. פרטי המוצר")
     
-    source_type = st.radio("מקור הנתונים:", ["מתכון קיים", "מוצר בודד מהמאגר", "הזנה ידנית"], horizontal=True)
+    source_type = st.radio("מקור הנתונים:", ["מתכון קיים", "הזנה ידנית", "צור ממוצרים במאגר"], index=2, horizontal=True)
     
     label_data = {
         'name': '',
@@ -1039,7 +1039,7 @@ elif page == "עיצוב תווית":
                              for key in FIELDS_MAPPING.keys():
                                  label_data['nutrition'][key] = prod_details.get(key, 0)
     
-    elif source_type == "מוצר בודד מהמאגר":
+    elif source_type == "צור ממוצרים במאגר":
         st.caption("הרכב מוצר ממספר רכיבים. המערכת תחשב את הערכים הסופיים ותסדר את רשימת הרכיבים.")
         
         # Initialize ingredients list if not present
