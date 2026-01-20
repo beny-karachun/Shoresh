@@ -1086,7 +1086,9 @@ elif page == "עיצוב תווית":
                         'name': selected_name,
                         'weight': weight_in_grams,
                         'display_amount': amount,
-                        'display_unit': selected_unit
+                        'display_unit': selected_unit,
+                        'oil_retention': None,  # {oil_code, oil_name, percentage}
+                        'nutrient_loss': None   # percentage value
                     })
                     st.rerun()
 
@@ -1096,33 +1098,173 @@ elif page == "עיצוב תווית":
             st.markdown("###### 🛒 רכיבים שנבחרו:")
             
             total_mix_weight = 0
+            total_oil_weight = 0  # Track total oil from retention
             
             for i, item in enumerate(st.session_state.label_ingredients):
-                col1, col2, col3 = st.columns([4, 2, 1])
+                col1, col2, col3, col4, col5 = st.columns([4, 2, 1, 1, 1])
                 with col1:
                     st.write(f"**{i+1}. {item['name']}**")
                 with col2:
                     st.write(f"{item['display_amount']} {item['display_unit']} ({item['weight']:.1f} גרם)")
                 with col3:
+                    if st.button("ספיחת שמן", key=f"label_oil_{i}"):
+                        st.session_state[f'oil_expand_{i}'] = not st.session_state.get(f'oil_expand_{i}', False)
+                        st.rerun()
+                with col4:
+                    if st.button("איבוד נוטריינטים", key=f"label_loss_{i}"):
+                        st.session_state[f'loss_expand_{i}'] = not st.session_state.get(f'loss_expand_{i}', False)
+                        st.rerun()
+                with col5:
                     if st.button("🗑️", key=f"label_del_{i}"):
                         st.session_state.label_ingredients.pop(i)
                         st.rerun()
                 
+                # Show nutrient loss info if set
+                nutrient_loss = item.get('nutrient_loss')
+                if nutrient_loss:
+                    st.caption(f"   📉 איבוד נוטריינטים: {nutrient_loss}%")
+                
+                # Show oil retention info if set
+                oil_ret = item.get('oil_retention')
+                if oil_ret:
+                    oil_weight = item['weight'] * oil_ret['percentage'] / 100.0
+                    total_oil_weight += oil_weight
+                    st.caption(f"   🛢️ ספיחת שמן: {oil_ret['oil_name']} ({oil_ret['percentage']}%) = {oil_weight:.1f} גרם")
+                
+                # Oil retention expander/form
+                if st.session_state.get(f'oil_expand_{i}', False):
+                    with st.container():
+                        st.markdown("---")
+                        st.markdown(f"**⚙️ הגדרת ספיחת שמן עבור: {item['name']}**")
+                        
+                        oil_search = st.text_input("חפש מוצר (שמן):", placeholder="שמן סויה, שמן זית...", key=f"oil_search_{i}")
+                        
+                        if oil_search:
+                            oil_results = search_foods(oil_search)
+                            if not oil_results.empty:
+                                oil_opts = {row['shmmitzrach']: row['Code'] for _, row in oil_results.iterrows()}
+                                selected_oil_name = st.selectbox("בחר שמן:", list(oil_opts.keys()), key=f"oil_select_{i}")
+                                
+                                if selected_oil_name:
+                                    selected_oil_code = oil_opts[selected_oil_name]
+                                    
+                                    # Get current percentage if exists
+                                    current_pct = oil_ret['percentage'] if oil_ret else 7.0
+                                    
+                                    oil_pct = st.number_input(
+                                        "אחוז ספיחת שמן (%):",
+                                        min_value=0.0,
+                                        max_value=100.0,
+                                        value=current_pct,
+                                        step=0.5,
+                                        key=f"oil_pct_{i}"
+                                    )
+                                    
+                                    col_save, col_clear, col_cancel = st.columns(3)
+                                    with col_save:
+                                        if st.button("💾 שמור", key=f"oil_save_{i}"):
+                                            st.session_state.label_ingredients[i]['oil_retention'] = {
+                                                'oil_code': selected_oil_code,
+                                                'oil_name': selected_oil_name,
+                                                'percentage': oil_pct
+                                            }
+                                            st.session_state[f'oil_expand_{i}'] = False
+                                            st.rerun()
+                                    with col_clear:
+                                        if st.button("🗑️ נקה", key=f"oil_clear_{i}"):
+                                            st.session_state.label_ingredients[i]['oil_retention'] = None
+                                            st.session_state[f'oil_expand_{i}'] = False
+                                            st.rerun()
+                                    with col_cancel:
+                                        if st.button("❌ ביטול", key=f"oil_cancel_{i}"):
+                                            st.session_state[f'oil_expand_{i}'] = False
+                                            st.rerun()
+                        
+                        st.markdown("---")
+                
+                # Nutrient loss expander/form
+                if st.session_state.get(f'loss_expand_{i}', False):
+                    with st.container():
+                        st.markdown("---")
+                        st.markdown(f"**📉 הגדרת איבוד נוטריינטים עבור: {item['name']}**")
+                        st.caption("הערכים התזונתיים של מוצר זה יופחתו באחוז שתבחר (לפני הוספת ספיחת שמן)")
+                        
+                        current_loss = item.get('nutrient_loss') or 0.0
+                        
+                        loss_pct = st.number_input(
+                            "אחוז איבוד נוטריינטים (%):",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=float(current_loss),
+                            step=0.1,
+                            key=f"loss_pct_{i}"
+                        )
+                        
+                        col_save_l, col_clear_l, col_cancel_l = st.columns(3)
+                        with col_save_l:
+                            if st.button("💾 שמור", key=f"loss_save_{i}"):
+                                st.session_state.label_ingredients[i]['nutrient_loss'] = loss_pct
+                                st.session_state[f'loss_expand_{i}'] = False
+                                st.rerun()
+                        with col_clear_l:
+                            if st.button("🗑️ נקה", key=f"loss_clear_{i}"):
+                                st.session_state.label_ingredients[i]['nutrient_loss'] = None
+                                st.session_state[f'loss_expand_{i}'] = False
+                                st.rerun()
+                        with col_cancel_l:
+                            if st.button("❌ ביטול", key=f"loss_cancel_{i}"):
+                                st.session_state[f'loss_expand_{i}'] = False
+                                st.rerun()
+                        
+                        st.markdown("---")
+                
                 total_mix_weight += item['weight']
             
-            st.info(f"⚖️ משקל כולל של התערובת: {total_mix_weight:.1f} גרם")
+            # Show totals including oil
+            if total_oil_weight > 0:
+                st.info(f"⚖️ משקל כולל של התערובת: {total_mix_weight:.1f} גרם + {total_oil_weight:.1f} גרם שמן = {total_mix_weight + total_oil_weight:.1f} גרם")
+            else:
+                st.info(f"⚖️ משקל כולל של התערובת: {total_mix_weight:.1f} גרם")
             
             # Update label_data
-            # 1. Sort ingredients by weight descending
+            # 1. Build ingredients list including retained oils, sorted by weight descending
+            all_ingredients_for_label = []
+            
+            # Add main ingredients
+            for item in st.session_state.label_ingredients:
+                all_ingredients_for_label.append({
+                    'name': item['name'],
+                    'weight': item['weight']
+                })
+                # Add retained oil as separate ingredient
+                oil_ret = item.get('oil_retention')
+                if oil_ret:
+                    oil_weight = item['weight'] * oil_ret['percentage'] / 100.0
+                    all_ingredients_for_label.append({
+                        'name': oil_ret['oil_name'],
+                        'weight': oil_weight
+                    })
+            
+            # Sort by weight descending
+            sorted_ingredients_for_label = sorted(all_ingredients_for_label, key=lambda x: x['weight'], reverse=True)
+            label_data['ingredients'] = ", ".join([item['name'] for item in sorted_ingredients_for_label])
+            
+            # Keep original sorted_ingredients for other uses
             sorted_ingredients = sorted(st.session_state.label_ingredients, key=lambda x: x['weight'], reverse=True)
-            label_data['ingredients'] = ", ".join([item['name'] for item in sorted_ingredients])
             
             # Default name to first ingredient or mix
             if not label_data['name'] and sorted_ingredients:
                 label_data['name'] = f"תערובת {sorted_ingredients[0]['name']}..."
 
-            # 2. Calculate Nutrition per 100g of MIX
-            if total_mix_weight > 0:
+            # 2. Calculate Nutrition per 100g of MIX (including oil retention)
+            # First, calculate total weight including oil from retention
+            total_weight_with_oil = total_mix_weight
+            for item in st.session_state.label_ingredients:
+                oil_ret = item.get('oil_retention')
+                if oil_ret:
+                    total_weight_with_oil += item['weight'] * oil_ret['percentage'] / 100.0
+            
+            if total_weight_with_oil > 0:
                 mix_nutrition = {k: 0.0 for k in FIELDS_MAPPING.keys()}
                 
                 for item in st.session_state.label_ingredients:
@@ -1130,16 +1272,38 @@ elif page == "עיצוב תווית":
                     if prod_details is not None:
                         # Convert nutrition (per 100g) to actual amount in item
                         item_factor = item['weight'] / 100.0
+                        
+                        # Apply nutrient loss if set (BEFORE oil retention)
+                        nutrient_loss = item.get('nutrient_loss')
+                        loss_factor = 1.0 - (nutrient_loss / 100.0) if nutrient_loss else 1.0
+                        
                         for k in FIELDS_MAPPING.keys():
                             val = prod_details.get(k, 0)
                             try:
                                 val = float(val)
                             except:
                                 val = 0
-                            mix_nutrition[k] += val * item_factor
+                            # Apply nutrient loss to the product's values
+                            mix_nutrition[k] += val * item_factor * loss_factor
+                    
+                    # Add oil retention nutrition if set
+                    oil_ret = item.get('oil_retention')
+                    if oil_ret:
+                        oil_details = get_food_details(oil_ret['oil_code'])
+                        if oil_details is not None:
+                            # Oil weight = ingredient weight * percentage / 100
+                            oil_weight = item['weight'] * oil_ret['percentage'] / 100.0
+                            oil_factor = oil_weight / 100.0  # Convert to per-100g factor
+                            for k in FIELDS_MAPPING.keys():
+                                val = oil_details.get(k, 0)
+                                try:
+                                    val = float(val)
+                                except:
+                                    val = 0
+                                mix_nutrition[k] += val * oil_factor
                 
-                # Normalize to 100g of final mix
-                final_factor = 100.0 / total_mix_weight
+                # Normalize to 100g of final mix (including oil)
+                final_factor = 100.0 / total_weight_with_oil
                 for k in FIELDS_MAPPING.keys():
                     label_data['nutrition'][k] = mix_nutrition[k] * final_factor
 
