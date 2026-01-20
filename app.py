@@ -1389,6 +1389,8 @@ elif page == "עיצוב תווית":
     with col_add3:
         expiry = st.text_input("לשימוש עד", value="עדיף להשתמש לפני...")
 
+    allergens = st.text_input("מידע על אלרגנים:", value="מכיל: ...")
+
     # --- Step 4: Red Label Logic ---
     # Thresholds (grams per 100g/ml)
     THRESHOLDS_SOLID = {'sodium': 400, 'total_sugars': 10, 'saturated_fat': 4}
@@ -1426,6 +1428,7 @@ elif page == "עיצוב תווית":
         color: black;
         font-family: 'Arial', sans-serif;
         direction: rtl;
+        text-align: right;
         max_width: 500px;
         margin: 0 auto;
         box-shadow: 5px 5px 15px rgba(0,0,0,0.1);
@@ -1486,13 +1489,20 @@ elif page == "עיצוב תווית":
         border-top: 1px solid #000;
         padding-top: 10px;
     }
+    .allergens-box {
+        border: 1px solid #000;
+        padding: 5px;
+        margin-top: 10px;
+        font-weight: bold;
+        font-size: 13px;
+    }
     </style>
     """
     
     # Construct HTML parts (using list to avoid indentation issues)
     html_parts = []
     html_parts.append(label_css)
-    html_parts.append('<div class="food-label">')
+    html_parts.append('<div class="food-label" dir="rtl">')
     
     # Header
     html_parts.append('<div class="label-header">')
@@ -1561,6 +1571,9 @@ elif page == "עיצוב תווית":
     
     # Ingredients & Footer
     html_parts.append(f'<div class="ingredients-section"><strong>רכיבים:</strong> {final_ingredients}</div>')
+    
+    if allergens:
+        html_parts.append(f'<div class="allergens-box">{allergens}</div>')
     
     html_parts.append('<div class="footer-info">')
     html_parts.append(f'<div><strong>תנאי אחסון:</strong> {storage}</div>')
