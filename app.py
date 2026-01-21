@@ -1087,7 +1087,7 @@ elif page == "עיצוב תווית":
                              for key in FIELDS_MAPPING.keys():
                                  label_data['nutrition'][key] = prod_details.get(key, 0)
     
-    elif source_type == "צור ממוצרים במאגר":
+    elif source_type == "(מומלץ) צור מתכון ממוצרים במאגר":
         st.caption("הרכב מוצר ממספר רכיבים. המערכת תחשב את הערכים הסופיים ותסדר את רשימת הרכיבים.")
         
         # Initialize ingredients list if not present
