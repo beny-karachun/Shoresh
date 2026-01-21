@@ -1911,7 +1911,64 @@ elif page == "עיצוב תווית":
     st.markdown(label_html, unsafe_allow_html=True)
     
     st.markdown("---")
-    st.info("💡 ניתן להדפיס תווית זו ע\"י שימוש בפונקציית ההדפסה של הדפדפן (Ctrl+P)")
+    
+    # Create a complete HTML file for download/preview
+    full_html_content = f'''<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>תצוגה מקדימה - תווית</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            margin: 0;
+            background: #f0f0f0;
+        }}
+        .print-instructions {{
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            text-align: center;
+        }}
+        @media print {{
+            .print-instructions {{
+                display: none;
+            }}
+            body {{
+                background: white;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="print-instructions">
+        💡 שנה את גודל החלון כרצונך, ואז לחץ <strong>Ctrl+P</strong> להדפסה או צלם מסך
+    </div>
+    {label_html}
+</body>
+</html>'''
+    
+    # Download button for the HTML file
+    st.download_button(
+        label="🖼️ הורד תווית כקובץ HTML (לפתיחה בחלון נפרד)",
+        data=full_html_content.encode('utf-8'),
+        file_name="label_preview.html",
+        mime="text/html",
+        help="הורד את התווית כקובץ HTML, פתח בדפדפן, שנה גודל החלון והדפס"
+    )
+    
+    # Instructions box
+    st.info("""
+    **💡 הוראות הדפסה:**
+    1. לחץ על הכפתור **"הורד תווית כקובץ HTML"** למעלה
+    2. פתח את הקובץ שהורד בדפדפן (לחץ עליו פעמיים)
+    3. שנה את גודל החלון והזז אותו כרצונך
+    4. להדפסה: לחץ **Ctrl+P** או צלם מסך (Screenshot)
+    """)
 
 
 # Footer
