@@ -1806,6 +1806,9 @@ elif page == "עיצוב תווית":
     .ingredients-section {
         margin-top: 15px;
         font-size: 13px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        white-space: normal;
     }
     .footer-info {
         margin-top: 15px;
