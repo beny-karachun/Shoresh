@@ -170,15 +170,15 @@ def calculate_with_sig_figs(original_value, factor):
         return 0
 
 def search_foods(search_term):
-    """Search for foods by name"""
+    """Search for foods by name or smlmitzrach code"""
     conn = get_connection()
     query = """
-    SELECT Code, shmmitzrach 
+    SELECT Code, smlmitzrach, shmmitzrach 
     FROM products 
-    WHERE shmmitzrach LIKE ?
+    WHERE shmmitzrach LIKE ? OR CAST(smlmitzrach AS TEXT) LIKE ?
     ORDER BY shmmitzrach
     """
-    df = pd.read_sql_query(query, conn, params=(f'%{search_term}%',))
+    df = pd.read_sql_query(query, conn, params=(f'%{search_term}%', f'%{search_term}%'))
     return df
 
 def advanced_search(conditions, columns=None):
@@ -289,6 +289,54 @@ def get_recipe_details(recipe_code):
     """
     df = pd.read_sql_query(query, conn, params=(recipe_code,))
     return df
+
+def get_retention_options():
+    """Get list of retention cooking methods from database"""
+    conn = get_connection()
+    query = """
+    SELECT retention_code, retention_name, hebrew_name 
+    FROM retentions 
+    ORDER BY hebrew_name
+    """
+    try:
+        df = pd.read_sql_query(query, conn)
+        return df
+    except:
+        return pd.DataFrame()
+
+def get_retention_factors(retention_code):
+    """Get retention factors for a specific cooking method"""
+    conn = get_connection()
+    query = """
+    SELECT * FROM retentions WHERE retention_code = ?
+    """
+    try:
+        df = pd.read_sql_query(query, conn, params=(retention_code,))
+        return df.iloc[0] if len(df) > 0 else None
+    except:
+        return None
+
+# Mapping from product nutrition fields to retention factor columns
+RETENTION_FIELD_MAPPING = {
+    'vitamin_b12': 'vitamin_b12',
+    'folate': 'folate',
+    'vitamin_b6': 'vitamin_b6',
+    'niacin': 'niacin',
+    'riboflavin': 'riboflavin',
+    'thiamin': 'thiamin',
+    'vitamin_c': 'vitamin_c',
+    'carotene': 'carotene',
+    'vitamin_a_re': 'vitamin_a_re',
+    'vitamin_a_iu': 'vitamin_a_iu',
+    'copper': 'copper',
+    'zinc': 'zinc',
+    'sodium': 'sodium',
+    'potassium': 'potassium',
+    'phosphorus': 'phosphorus',
+    'magnesium': 'magnesium',
+    'iron': 'iron',
+    'calcium': 'calcium'
+}
 
 def display_all_nutrition(food_data, factor=1.0):
     """Display all nutritional parameters"""
@@ -991,7 +1039,7 @@ elif page == "עיצוב תווית":
     # --- Step 1: Data Source ---
     st.header("1. פרטי המוצר")
     
-    source_type = st.radio("מקור הנתונים:", ["מתכון קיים", "הזנה ידנית", "צור ממוצרים במאגר"], index=2, horizontal=True)
+    source_type = st.radio("מקור הנתונים:", ["מתכון קיים", "הזנה ידנית", "(מומלץ) צור מתכון ממוצרים במאגר"], index=2, horizontal=True)
     
     label_data = {
         'name': '',
@@ -1088,7 +1136,8 @@ elif page == "עיצוב תווית":
                         'display_amount': amount,
                         'display_unit': selected_unit,
                         'oil_retention': None,  # {oil_code, oil_name, percentage}
-                        'nutrient_loss': None   # percentage value
+                        'nutrient_loss': None,  # percentage value
+                        'retention_code': None  # {code, name, hebrew_name}
                     })
                     st.rerun()
 
@@ -1101,7 +1150,7 @@ elif page == "עיצוב תווית":
             total_oil_weight = 0  # Track total oil from retention
             
             for i, item in enumerate(st.session_state.label_ingredients):
-                col1, col2, col3, col4, col5 = st.columns([4, 2, 1, 1, 1])
+                col1, col2, col3, col4, col5, col6 = st.columns([4, 2, 1, 1, 1, 1])
                 with col1:
                     st.write(f"**{i+1}. {item['name']}**")
                 with col2:
@@ -1111,13 +1160,22 @@ elif page == "עיצוב תווית":
                         st.session_state[f'oil_expand_{i}'] = not st.session_state.get(f'oil_expand_{i}', False)
                         st.rerun()
                 with col4:
+                    if st.button("קוד שימור", key=f"label_ret_{i}"):
+                        st.session_state[f'ret_expand_{i}'] = not st.session_state.get(f'ret_expand_{i}', False)
+                        st.rerun()
+                with col5:
                     if st.button("איבוד נוטריינטים", key=f"label_loss_{i}"):
                         st.session_state[f'loss_expand_{i}'] = not st.session_state.get(f'loss_expand_{i}', False)
                         st.rerun()
-                with col5:
+                with col6:
                     if st.button("🗑️", key=f"label_del_{i}"):
                         st.session_state.label_ingredients.pop(i)
                         st.rerun()
+                
+                # Show retention code info if set
+                retention_info = item.get('retention_code')
+                if retention_info:
+                    st.caption(f"   🍳 קוד שימור: {retention_info['hebrew_name']}")
                 
                 # Show nutrient loss info if set
                 nutrient_loss = item.get('nutrient_loss')
@@ -1179,6 +1237,91 @@ elif page == "עיצוב תווית":
                                         if st.button("❌ ביטול", key=f"oil_cancel_{i}"):
                                             st.session_state[f'oil_expand_{i}'] = False
                                             st.rerun()
+                        
+                        st.markdown("---")
+                
+                # Retention code expander/form
+                if st.session_state.get(f'ret_expand_{i}', False):
+                    with st.container():
+                        st.markdown("---")
+                        st.markdown(f"**🍳 הגדרת קוד שימור (Retention) עבור: {item['name']}**")
+                        st.caption("חפש שיטת בישול/עיבוד כדי להתאים את אחוזי השימור של הויטמינים והמינרלים")
+                        
+                        # Search box for retention codes
+                        ret_search = st.text_input(
+                            "חפש שיטת בישול:",
+                            placeholder="לדוגמה: מטוגן, אפוי, מבושל, ביצה, עוף...",
+                            key=f"ret_search_{i}"
+                        )
+                        
+                        # Get retention options from database
+                        retention_options = get_retention_options()
+                        
+                        if not retention_options.empty:
+                            # Filter by search term if provided
+                            if ret_search:
+                                # Search in both hebrew_name and retention_name
+                                mask = (
+                                    retention_options['hebrew_name'].str.contains(ret_search, case=False, na=False) |
+                                    retention_options['retention_name'].str.contains(ret_search, case=False, na=False)
+                                )
+                                filtered_options = retention_options[mask]
+                            else:
+                                filtered_options = retention_options
+                            
+                            if not filtered_options.empty:
+                                # Create options dict: hebrew_name -> (code, name)
+                                ret_opts = {row['hebrew_name']: (row['retention_code'], row['retention_name']) 
+                                           for _, row in filtered_options.iterrows()}
+                                
+                                # Add "none" option
+                                ret_display_list = ['-- ללא --'] + list(ret_opts.keys())
+                                
+                                # Get current selection if exists
+                                current_ret = item.get('retention_code')
+                                current_idx = 0
+                                if current_ret and current_ret['hebrew_name'] in ret_display_list:
+                                    try:
+                                        current_idx = ret_display_list.index(current_ret['hebrew_name'])
+                                    except ValueError:
+                                        current_idx = 0
+                                
+                                st.caption(f"נמצאו {len(filtered_options)} תוצאות")
+                                
+                                selected_ret_name = st.selectbox(
+                                    "בחר שיטת בישול/עיבוד:",
+                                    options=ret_display_list,
+                                    index=current_idx,
+                                    key=f"ret_select_{i}"
+                                )
+                                
+                                col_save_r, col_clear_r, col_cancel_r = st.columns(3)
+                                with col_save_r:
+                                    if st.button("💾 שמור", key=f"ret_save_{i}"):
+                                        if selected_ret_name != '-- ללא --':
+                                            code, name = ret_opts[selected_ret_name]
+                                            st.session_state.label_ingredients[i]['retention_code'] = {
+                                                'code': code,
+                                                'name': name,
+                                                'hebrew_name': selected_ret_name
+                                            }
+                                        else:
+                                            st.session_state.label_ingredients[i]['retention_code'] = None
+                                        st.session_state[f'ret_expand_{i}'] = False
+                                        st.rerun()
+                                with col_clear_r:
+                                    if st.button("🗑️ נקה", key=f"ret_clear_{i}"):
+                                        st.session_state.label_ingredients[i]['retention_code'] = None
+                                        st.session_state[f'ret_expand_{i}'] = False
+                                        st.rerun()
+                                with col_cancel_r:
+                                    if st.button("❌ ביטול", key=f"ret_cancel_{i}"):
+                                        st.session_state[f'ret_expand_{i}'] = False
+                                        st.rerun()
+                            else:
+                                st.warning("לא נמצאו תוצאות לחיפוש זה")
+                        else:
+                            st.warning("לא נמצאו קודי שימור בבסיס הנתונים")
                         
                         st.markdown("---")
                 
@@ -1277,14 +1420,31 @@ elif page == "עיצוב תווית":
                         nutrient_loss = item.get('nutrient_loss')
                         loss_factor = 1.0 - (nutrient_loss / 100.0) if nutrient_loss else 1.0
                         
+                        # Get retention factors if a retention code is set
+                        retention_factors = None
+                        retention_info = item.get('retention_code')
+                        if retention_info:
+                            retention_factors = get_retention_factors(retention_info['code'])
+                        
                         for k in FIELDS_MAPPING.keys():
                             val = prod_details.get(k, 0)
                             try:
                                 val = float(val)
                             except:
                                 val = 0
-                            # Apply nutrient loss to the product's values
-                            mix_nutrition[k] += val * item_factor * loss_factor
+                            
+                            # Apply retention factor if applicable
+                            retention_multiplier = 1.0
+                            if retention_factors is not None and k in RETENTION_FIELD_MAPPING:
+                                retention_col = RETENTION_FIELD_MAPPING[k]
+                                try:
+                                    retention_pct = float(retention_factors.get(retention_col, 100))
+                                    retention_multiplier = retention_pct / 100.0
+                                except:
+                                    retention_multiplier = 1.0
+                            
+                            # Apply nutrient loss and retention factor to the product's values
+                            mix_nutrition[k] += val * item_factor * loss_factor * retention_multiplier
                     
                     # Add oil retention nutrition if set
                     oil_ret = item.get('oil_retention')
