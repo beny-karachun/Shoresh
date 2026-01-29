@@ -1136,7 +1136,7 @@ elif page == "עיצוב תווית":
                         'display_amount': amount,
                         'display_unit': selected_unit,
                         'oil_retention': None,  # {oil_code, oil_name, percentage}
-                        'nutrient_loss': None,  # percentage value
+                        'liquid_loss': None,  # percentage of liquid lost (concentrates nutrients)
                         'retention_code': None  # {code, name, hebrew_name}
                     })
                     st.rerun()
@@ -1164,7 +1164,7 @@ elif page == "עיצוב תווית":
                         st.session_state[f'ret_expand_{i}'] = not st.session_state.get(f'ret_expand_{i}', False)
                         st.rerun()
                 with col5:
-                    if st.button("איבוד נוטריינטים", key=f"label_loss_{i}"):
+                    if st.button("איבוד נוזלים", key=f"label_loss_{i}"):
                         st.session_state[f'loss_expand_{i}'] = not st.session_state.get(f'loss_expand_{i}', False)
                         st.rerun()
                 with col6:
@@ -1177,10 +1177,10 @@ elif page == "עיצוב תווית":
                 if retention_info:
                     st.caption(f"   🍳 קוד שימור: {retention_info['hebrew_name']}")
                 
-                # Show nutrient loss info if set
-                nutrient_loss = item.get('nutrient_loss')
-                if nutrient_loss:
-                    st.caption(f"   📉 איבוד נוטריינטים: {nutrient_loss}%")
+                # Show liquid loss info if set
+                liquid_loss = item.get('liquid_loss')
+                if liquid_loss:
+                    st.caption(f"   💧 איבוד נוזלים: {liquid_loss}% (ריכוז x{1/(1-liquid_loss/100):.2f})")
                 
                 # Show oil retention info if set
                 oil_ret = item.get('oil_retention')
@@ -1325,19 +1325,19 @@ elif page == "עיצוב תווית":
                         
                         st.markdown("---")
                 
-                # Nutrient loss expander/form
+                # Liquid loss expander/form
                 if st.session_state.get(f'loss_expand_{i}', False):
                     with st.container():
                         st.markdown("---")
-                        st.markdown(f"**📉 הגדרת איבוד נוטריינטים עבור: {item['name']}**")
-                        st.caption("הערכים התזונתיים של מוצר זה יופחתו באחוז שתבחר (לפני הוספת ספיחת שמן)")
+                        st.markdown(f"**💧 הגדרת איבוד נוזלים עבור: {item['name']}**")
+                        st.caption("הערכים התזונתיים של מוצר זה ירוכזו - אם 50% מהנוזל אבד, הערכים יהיו כפולים (לפני הוספת ספיחת שמן)")
                         
-                        current_loss = item.get('nutrient_loss') or 0.0
+                        current_loss = item.get('liquid_loss') or 0.0
                         
                         loss_pct = st.number_input(
-                            "אחוז איבוד נוטריינטים (%):",
+                            "אחוז איבוד נוזלים (%):",
                             min_value=0.0,
-                            max_value=100.0,
+                            max_value=99.0,
                             value=float(current_loss),
                             step=0.1,
                             key=f"loss_pct_{i}"
@@ -1346,12 +1346,12 @@ elif page == "עיצוב תווית":
                         col_save_l, col_clear_l, col_cancel_l = st.columns(3)
                         with col_save_l:
                             if st.button("💾 שמור", key=f"loss_save_{i}"):
-                                st.session_state.label_ingredients[i]['nutrient_loss'] = loss_pct
+                                st.session_state.label_ingredients[i]['liquid_loss'] = loss_pct
                                 st.session_state[f'loss_expand_{i}'] = False
                                 st.rerun()
                         with col_clear_l:
                             if st.button("🗑️ נקה", key=f"loss_clear_{i}"):
-                                st.session_state.label_ingredients[i]['nutrient_loss'] = None
+                                st.session_state.label_ingredients[i]['liquid_loss'] = None
                                 st.session_state[f'loss_expand_{i}'] = False
                                 st.rerun()
                         with col_cancel_l:
@@ -1416,9 +1416,10 @@ elif page == "עיצוב תווית":
                         # Convert nutrition (per 100g) to actual amount in item
                         item_factor = item['weight'] / 100.0
                         
-                        # Apply nutrient loss if set (BEFORE oil retention)
-                        nutrient_loss = item.get('nutrient_loss')
-                        loss_factor = 1.0 - (nutrient_loss / 100.0) if nutrient_loss else 1.0
+                        # Apply liquid loss concentration if set (BEFORE oil retention)
+                        # If X% liquid is lost, nutrients are concentrated by factor of 1/(1-X/100)
+                        liquid_loss = item.get('liquid_loss')
+                        concentration_factor = 1.0 / (1.0 - liquid_loss / 100.0) if liquid_loss else 1.0
                         
                         # Get retention factors if a retention code is set
                         retention_factors = None
@@ -1443,8 +1444,8 @@ elif page == "עיצוב תווית":
                                 except:
                                     retention_multiplier = 1.0
                             
-                            # Apply nutrient loss and retention factor to the product's values
-                            mix_nutrition[k] += val * item_factor * loss_factor * retention_multiplier
+                            # Apply liquid loss concentration and retention factor to the product's values
+                            mix_nutrition[k] += val * item_factor * concentration_factor * retention_multiplier
                     
                     # Add oil retention nutrition if set
                     oil_ret = item.get('oil_retention')
