@@ -453,8 +453,63 @@ function render(container) {
     const nameField = h('input', { type: 'text', class: 'text-input', value: labelData.name || '' });
     const isLiquid = h('input', { type: 'checkbox' });
     const marketing = h('textarea', { class: 'text-input', rows: '3' });
-    const ingredientsField = h('textarea', { class: 'text-input', rows: '3' });
-    ingredientsField.value = labelData.ingredients || '';
+
+    // Ingredient chips: each ingredient is an editable name + a bold toggle + a
+    // remove button. Editing a name does not re-render (keeps input focus); only
+    // add / remove / auto-highlight rebuild.
+    let ingredientItems = parseIngredients(labelData.ingredients);
+    const chipsBox = h('div', { class: 'chips-box' });
+    const addInput = h('input', { type: 'text', class: 'chip-input add', placeholder: 'הוסף רכיב…' });
+
+    const sizeInput = (input, value) => { input.size = Math.max(4, String(value || '').length + 1); };
+
+    const makeChip = (item) => {
+      const nameInput = h('input', { type: 'text', class: 'chip-input', value: item.name });
+      sizeInput(nameInput, item.name);
+      nameInput.style.fontWeight = item.bold ? '700' : '400';
+      nameInput.addEventListener('input', () => {
+        item.name = nameInput.value;
+        sizeInput(nameInput, item.name);
+        recompute();
+      });
+      const boldBtn = h('button', { class: `btn small chip-bold${item.bold ? ' active' : ''}`, text: 'B', title: 'הדגשה (מודגש)' });
+      boldBtn.addEventListener('click', () => {
+        item.bold = !item.bold;
+        nameInput.style.fontWeight = item.bold ? '700' : '400';
+        boldBtn.classList.toggle('active', item.bold);
+        recompute();
+      });
+      const delBtn = h('button', { class: 'btn danger small', text: '×', title: 'הסר' });
+      const chip = h('div', { class: 'ingredient-chip' }, [nameInput, boldBtn, delBtn]);
+      delBtn.addEventListener('click', () => {
+        const i = ingredientItems.indexOf(item);
+        if (i >= 0) ingredientItems.splice(i, 1);
+        chip.remove();
+        recompute();
+      });
+      return chip;
+    };
+
+    const renderChips = () => { clear(chipsBox); ingredientItems.forEach((it) => chipsBox.appendChild(makeChip(it))); };
+    const addIngredient = () => {
+      const name = addInput.value.trim();
+      if (!name) return;
+      const item = { name, bold: false };
+      ingredientItems.push(item);
+      chipsBox.appendChild(makeChip(item));
+      addInput.value = '';
+      addInput.focus();
+      recompute();
+    };
+    addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addIngredient(); } });
+    renderChips();
+
+    const autoBtn = h('button', { class: 'btn small', text: '✨ הדגש אלרגנים', title: 'הדגשת רכיבים שהם אלרגנים נפוצים' });
+    autoBtn.addEventListener('click', () => {
+      ingredientItems.forEach((it) => { if (allergensInName(it.name).length) it.bold = true; });
+      renderChips();
+      recompute();
+    });
 
     stepsArea.appendChild(h('div', { class: 'panel' }, [
       h('div', { class: 'row' }, [
@@ -462,7 +517,15 @@ function render(container) {
         h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'טקסט שיווקי / תיאור:' }), marketing]),
       ]),
       h('label', { class: 'checkbox', style: { margin: '10px 0' } }, [isLiquid, 'האם המוצר נוזלי? (משפיע על ספים למדבקות אדומות)']),
-      h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'רשימת רכיבים:' }), ingredientsField]),
+      h('div', { class: 'field' }, [
+        h('span', { class: 'field-label', text: 'רשימת רכיבים — ערוך שם, לחץ B להדגשה, × להסרה:' }),
+        chipsBox,
+        h('div', { class: 'row tight', style: { marginTop: '8px' } }, [
+          addInput,
+          h('button', { class: 'btn small', text: '➕ הוסף', onClick: addIngredient }),
+          autoBtn,
+        ]),
+      ]),
     ]));
 
     // Mandatory nutrition (editable)
@@ -519,7 +582,7 @@ function render(container) {
     stepsArea.appendChild(previewArea);
     stepsArea.appendChild(downloadArea);
 
-    [nameField, isLiquid, marketing, ingredientsField].forEach((el) => el.addEventListener('input', recompute));
+    [nameField, marketing].forEach((el) => el.addEventListener('input', recompute));
     isLiquid.addEventListener('change', recompute);
 
     function readEdited() {
@@ -560,10 +623,19 @@ function render(container) {
         `${STANDARD_META[standard].short} · ספי סימון אדום ל-${unitTxt}: נתרן ${thresholds.sodium} מ"ג, ` +
         `סוכר ${thresholds.total_sugars} גרם, שומן רווי ${thresholds.saturated_fat} גרם. ${marksTxt}.`));
 
+      // Ingredients HTML (manual bold per chip) + detected allergens for 1169.
+      const ingredientsHtml = ingredientItems
+        .filter((it) => it.name.trim())
+        .map((it) => (it.bold ? `<strong>${escapeHtml(it.name)}</strong>` : escapeHtml(it.name)))
+        .join(', ');
+      const containsAllergens = standard === '1169'
+        ? [...new Set(ingredientItems.flatMap((it) => allergensInName(it.name)))]
+        : [];
+
       // Preview.
       const markup = buildLabelMarkup(standard, {
         finalName: nameField.value, marketing: marketing.value, redLabels,
-        isLiquid: liquid, edited, ingredients: ingredientsField.value,
+        isLiquid: liquid, edited, ingredientsHtml, containsAllergens,
         allergens: allergens.value, storage: storage.value,
         manufacturer: manufacturer.value, expiry: expiry.value,
       });
@@ -642,14 +714,12 @@ function buildLabelMarkup(standardKey, s) {
     ? eu1169TableHtml(s.edited, s.isLiquid)
     : il1145TableHtml(s.edited, s.isLiquid));
 
-  // Ingredients — under 1169, emphasise (bold) allergen ingredients.
-  const allergenInfo = standardKey === '1169' ? detectAllergens(s.ingredients) : null;
-  const ingredientsHtml = allergenInfo ? allergenInfo.html : escapeHtml(s.ingredients);
-  parts.push(`<div class="ingredients-section"><strong>רכיבים:</strong> ${ingredientsHtml}</div>`);
+  // Ingredients — pre-rendered with per-chip manual bold highlighting.
+  parts.push(`<div class="ingredients-section"><strong>רכיבים:</strong> ${s.ingredientsHtml || ''}</div>`);
 
   // "Contains" line: auto-detected allergens (1169) + any manual note.
-  if (allergenInfo && allergenInfo.found.length) {
-    parts.push(`<div class="allergens-box">מכיל: ${escapeHtml(allergenInfo.found.join(', '))}.</div>`);
+  if (s.containsAllergens && s.containsAllergens.length) {
+    parts.push(`<div class="allergens-box">מכיל: ${escapeHtml(s.containsAllergens.join(', '))}.</div>`);
   }
   if (s.allergens) parts.push(`<div class="allergens-box">${escapeHtml(s.allergens)}</div>`);
 
@@ -716,23 +786,25 @@ function eu1169TableHtml(e, isLiquid) {
     + `<div style="font-size:11px;color:#555;margin-top:4px;">* מבוסס על צריכה יומית מומלצת למבוגר ממוצע (8,400 קי"ג / 2,000 קק"ל). נתרן: ${Math.round(Number(e.sodium) || 0)} מ"ג.</div>`;
 }
 
-// Detect & emphasise allergens (תקן 1169). Splits ingredients on commas, bolds
-// any token containing an allergen keyword (respecting per-allergen excludes),
-// and returns the detected allergen names for the "מכיל" line.
-function detectAllergens(text) {
-  const raw = String(text || '');
-  if (!raw.trim()) return { html: '', found: [] };
-  const found = new Set();
-  const html = raw.split(',').map((tok) => {
-    let hit = false;
-    for (const a of IL_ALLERGENS) {
-      if (a.exclude && a.exclude.some((x) => tok.includes(x))) continue;
-      if (a.keywords.some((k) => tok.includes(k))) { hit = true; found.add(a.he); }
-    }
-    const esc = escapeHtml(tok);
-    return hit ? `<strong>${esc}</strong>` : esc;
-  }).join(',');
-  return { html, found: [...found] };
+// Parse a comma-separated ingredients string into editable chip items.
+function parseIngredients(str) {
+  return String(str || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((name) => ({ name, bold: false }));
+}
+
+// Return the allergen categories (Hebrew names) detected in a single ingredient
+// name, respecting per-allergen excludes (e.g. milk "חלב" ≠ protein "חלבון").
+function allergensInName(name) {
+  const n = String(name || '');
+  const found = [];
+  for (const a of IL_ALLERGENS) {
+    if (a.exclude && a.exclude.some((x) => n.includes(x))) continue;
+    if (a.keywords.some((k) => n.includes(k))) found.push(a.he);
+  }
+  return found;
 }
 
 function renderDownload(area, labelHtml) {

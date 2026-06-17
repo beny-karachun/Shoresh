@@ -324,4 +324,25 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; 
 .food-label .allergens-box { border: 1px solid #000; padding: 5px; margin-top: 10px; font-weight: bold; font-size: 13px; }
 .food-label .red-fallback { color: red; font-weight: bold; border: 1px solid red; padding: 5px; }
 
+/* ---------- Ingredient chips (label designer) ---------- */
+.chips-box { display: flex; flex-wrap: wrap; gap: 6px; }
+.ingredient-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #fff; border: 1px solid var(--border);
+  border-radius: 999px; padding: 2px 4px 2px 10px;
+}
+.chip-input {
+  border: none; background: transparent; font-family: inherit;
+  font-size: 14px; padding: 3px 2px; color: var(--text);
+}
+.chip-input:focus { outline: none; }
+.chip-input.add {
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-width: 150px;
+}
+.chip-bold {
+  min-width: 26px; padding: 2px 7px; line-height: 1.4;
+  font-weight: 700; font-style: italic;
+}
+.chip-bold.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
 .hidden { display: none !important; }
