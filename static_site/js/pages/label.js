@@ -40,7 +40,6 @@ const LABEL_CSS = `
 .label-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
 .label-title { font-size: 24px; font-weight: bold; margin: 0; }
 .label-marketing { font-style: italic; margin-top: 5px; }
-.label-standard-badge { font-size: 11px; color: #555; margin-top: 4px; }
 .red-labels-container { display: flex; justify-content: center; gap: 15px; margin: 15px 0; }
 .red-label-img { width: 80px; height: auto; }
 .nutrition-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
@@ -624,7 +623,6 @@ function buildLabelMarkup(standardKey, s) {
   parts.push('<div class="label-header">');
   parts.push(`<h1 class="label-title">${escapeHtml(s.finalName)}</h1>`);
   if (s.marketing) parts.push(`<div class="label-marketing">${escapeHtml(s.marketing)}</div>`);
-  parts.push(`<div class="label-standard-badge">לפי תקן ${standardKey === '1169' ? '1169 (התאמה ישראלית)' : '1145'}</div>`);
   parts.push('</div>');
 
   // Red warning marks — retained under BOTH standards.
