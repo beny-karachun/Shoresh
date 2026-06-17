@@ -9,7 +9,7 @@ import {
 } from '../ui.js';
 import {
   FIELDS_MAPPING, RETENTION_FIELD_MAPPING, NUTRIENT_CATEGORIES, MANDATORY_FIELDS,
-  THRESHOLDS_SOLID, THRESHOLDS_LIQUID,
+  RED_LABEL_STANDARDS, DEFAULT_STANDARD,
 } from '../nutrition.js';
 import {
   searchFoods, searchRecipes, getFoodDetails, getAvailableUnits,
@@ -49,6 +49,7 @@ const RED_LABEL_IMAGES = {
 // Persisted state (survives tab switches).
 let sourceType = SOURCE_BUILD;
 let labelIngredients = []; // builder ingredients
+let standard = DEFAULT_STANDARD; // 'new' (Phase B, compliant) or 'old' (Phase A)
 const imageDataUrls = {};  // filename -> dataURL (loaded lazily)
 
 function emptyNutrition() {
@@ -413,12 +414,22 @@ function render(container) {
     const ingredientsField = h('textarea', { class: 'text-input', rows: '3' });
     ingredientsField.value = labelData.ingredients || '';
 
+    // Red-label standard selector (old Phase A 2020 / new Phase B 2021+).
+    const standardSel = selectField('תקן סימון אדום:', [
+      { value: 'new', label: RED_LABEL_STANDARDS.new.name },
+      { value: 'old', label: RED_LABEL_STANDARDS.old.name },
+    ], { value: standard });
+    standardSel.select.addEventListener('change', () => { standard = standardSel.select.value; recompute(); });
+
     stepsArea.appendChild(h('div', { class: 'panel' }, [
       h('div', { class: 'row' }, [
         h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'שם מוצר (כפי שיופיע על התווית):' }), nameField]),
         h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'טקסט שיווקי / תיאור:' }), marketing]),
       ]),
-      h('label', { class: 'checkbox', style: { margin: '10px 0' } }, [isLiquid, 'האם המוצר נוזלי? (משפיע על ספים למדבקות אדומות)']),
+      h('div', { class: 'row tight', style: { margin: '10px 0' } }, [
+        h('label', { class: 'checkbox' }, [isLiquid, 'האם המוצר נוזלי? (משפיע על ספים למדבקות אדומות)']),
+        standardSel.wrapper,
+      ]),
       h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'רשימת רכיבים:' }), ingredientsField]),
     ]));
 
@@ -469,6 +480,8 @@ function render(container) {
     // Step 4/5 — preview
     stepsArea.appendChild(h('hr', { class: 'divider' }));
     stepsArea.appendChild(h('h3', { class: 'block-title', text: '4. תצוגה מקדימה' }));
+    const redLabelNote = h('div', {});
+    stepsArea.appendChild(redLabelNote);
     const previewArea = h('div', { class: 'label-preview-wrap' });
     const downloadArea = h('div', { style: { marginTop: '16px' } });
     stepsArea.appendChild(previewArea);
@@ -497,12 +510,24 @@ function render(container) {
       }
       renderComposition(compositionArea, edited, labelData.nutrition, combinedFactor, dispW);
 
-      // Red labels.
-      const thresholds = liquid ? THRESHOLDS_LIQUID : THRESHOLDS_SOLID;
+      // Red labels — thresholds depend on the selected standard (old/new) and
+      // whether the product is solid or liquid.
+      const std = RED_LABEL_STANDARDS[standard];
+      const thresholds = liquid ? std.liquid : std.solid;
       const redLabels = [];
       if (edited.sodium > thresholds.sodium) redLabels.push(['נתרן', 'גבוה בנתרן']);
       if (edited.total_sugars > thresholds.total_sugars) redLabels.push(['סוכר', 'גבוה בסוכר']);
       if (edited.saturated_fat > thresholds.saturated_fat) redLabels.push(['שומן רווי', 'גבוה בשומן רווי']);
+
+      // Explain which standard/thresholds produced the marks.
+      const unitTxt = liquid ? '100 מ"ל' : '100 גרם';
+      const marksTxt = redLabels.length
+        ? `סימוני אזהרה: ${redLabels.map((r) => r[1]).join(', ')}`
+        : 'אין סימוני אזהרה אדומים';
+      clear(redLabelNote);
+      redLabelNote.appendChild(statusBox(redLabels.length ? 'warning' : 'success',
+        `${std.short} — ספים ל-${unitTxt}: נתרן ${thresholds.sodium} מ"ג, ` +
+        `סוכר ${thresholds.total_sugars} גרם, שומן רווי ${thresholds.saturated_fat} גרם. ${marksTxt}.`));
 
       // Preview.
       const markup = buildLabelMarkup({

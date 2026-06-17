@@ -374,9 +374,36 @@ export const MANDATORY_FIELDS = [
   'total_dietary_fiber', 'protein',
 ];
 
-// Red-label thresholds (grams / mg per 100g or 100ml), per Israeli standard.
-export const THRESHOLDS_SOLID = { sodium: 400, total_sugars: 10, saturated_fat: 4 };
-export const THRESHOLDS_LIQUID = { sodium: 300, total_sugars: 5, saturated_fat: 3 };
+// Red-label thresholds (mg/g per 100g solid or 100ml liquid), from the Israeli
+// front-of-pack warning regulation (תקנות הגנה על בריאות הציבור (מזון) (סימון
+// תזונתי)). The regulation rolled out in two phases with different thresholds:
+//   old = Phase A (שלב א׳)  — in force 1 Jan 2020 – 31 Dec 2020
+//   new = Phase B (שלב ב׳)  — in force from 1 Jan 2021 (current & permanent)
+// Sources: he.wikipedia.org "תקנות הגנה על בריאות הציבור (מזון) (סימון תזונתי)";
+// health.gov.il food-labeling pages; FoodNavigator 2020-01-27.
+export const RED_LABEL_STANDARDS = {
+  new: {
+    key: 'new',
+    name: 'תקן חדש (שלב ב׳ — 2021 ואילך)',
+    short: 'תקן חדש',
+    solid: { sodium: 400, total_sugars: 10, saturated_fat: 4 },
+    liquid: { sodium: 300, total_sugars: 5, saturated_fat: 3 },
+  },
+  old: {
+    key: 'old',
+    name: 'תקן ישן (שלב א׳ — 2020)',
+    short: 'תקן ישן',
+    solid: { sodium: 500, total_sugars: 13.5, saturated_fat: 5 },
+    liquid: { sodium: 400, total_sugars: 5, saturated_fat: 3 },
+  },
+};
+
+// The current, compliant standard — used as the default.
+export const DEFAULT_STANDARD = 'new';
+
+// Backwards-compatible aliases (point at the current/new standard).
+export const THRESHOLDS_SOLID = RED_LABEL_STANDARDS.new.solid;
+export const THRESHOLDS_LIQUID = RED_LABEL_STANDARDS.new.liquid;
 
 // Operators available in advanced search (Hebrew label -> SQL).
 export const SEARCH_OPERATORS = ['שווה', 'גדול מ', 'קטן מ', 'גדול שווה', 'קטן שווה', 'בין'];

@@ -71,7 +71,7 @@ The same six modes, as tabs across the top:
 | Comparison | השוואת מוצרים | Side-by-side nutrient comparison of several products |
 | Daily calculator | מחשבון יומי | Sum nutrients across a day's foods |
 | Recipe calculator | מחשבון מתכונים | Recipe ingredients, liquid loss, finished-product per-100g |
-| Label designer | עיצוב תווית | Build a 1145-standard label incl. red ("high in…") marks |
+| Label designer | עיצוב תווית | Build a label incl. red ("high in…") marks; old/new standard toggle |
 
 ### Significant-figures fidelity
 
@@ -128,3 +128,20 @@ site is plain ES modules plus the vendored sql.js.
   the original.
 - The downloadable label HTML embeds the red-label images as base64, so the saved
   file is self-contained (matching the original app's behaviour).
+
+### Red-label standard (old / new)
+
+The label designer has a **"תקן סימון אדום"** selector for the Israeli front-of-pack
+warning regulation, which rolled out in two phases with different thresholds
+(per 100 g solid / 100 ml liquid):
+
+| Nutrient | Old — Phase A (2020) solid / liquid | New — Phase B (2021→) solid / liquid |
+|----------|--------------------------------------|---------------------------------------|
+| Sodium (mg)        | 500 / 400  | **400 / 300** |
+| Total sugars (g)   | 13.5 / 5   | **10 / 5** |
+| Saturated fat (g)  | 5 / 3      | **4 / 3** |
+
+The default is **New (Phase B)** — the current, permanent, compliant thresholds.
+The "Old" mode is provided for reference / re-issuing older labels. The chosen
+standard drives which red warning marks appear; a note under the preview shows the
+active thresholds and which marks were triggered.
