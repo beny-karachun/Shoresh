@@ -374,36 +374,58 @@ export const MANDATORY_FIELDS = [
   'total_dietary_fiber', 'protein',
 ];
 
-// Red-label thresholds (mg/g per 100g solid or 100ml liquid), from the Israeli
-// front-of-pack warning regulation (תקנות הגנה על בריאות הציבור (מזון) (סימון
-// תזונתי)). The regulation rolled out in two phases with different thresholds:
-//   old = Phase A (שלב א׳)  — in force 1 Jan 2020 – 31 Dec 2020
-//   new = Phase B (שלב ב׳)  — in force from 1 Jan 2021 (current & permanent)
-// Sources: he.wikipedia.org "תקנות הגנה על בריאות הציבור (מזון) (סימון תזונתי)";
-// health.gov.il food-labeling pages; FoodNavigator 2020-01-27.
-export const RED_LABEL_STANDARDS = {
-  new: {
-    key: 'new',
-    name: 'תקן חדש (שלב ב׳ — 2021 ואילך)',
-    short: 'תקן חדש',
-    solid: { sodium: 400, total_sugars: 10, saturated_fat: 4 },
-    liquid: { sodium: 300, total_sugars: 5, saturated_fat: 3 },
-  },
-  old: {
-    key: 'old',
-    name: 'תקן ישן (שלב א׳ — 2020)',
-    short: 'תקן ישן',
-    solid: { sodium: 500, total_sugars: 13.5, saturated_fat: 5 },
-    liquid: { sodium: 400, total_sugars: 5, saturated_fat: 3 },
-  },
+// Red-label (סימון אדום) thresholds — mg/g per 100g solid or 100ml liquid.
+// These are the current Israeli front-of-pack warning thresholds (in force
+// since 2021). The label designer offers two labeling standards — תקן 1145
+// (current Israeli) and the Israeli-adapted תקן 1169 — and the red warning
+// marks are an Israeli requirement RETAINED under BOTH, so these thresholds
+// apply in either mode.
+export const THRESHOLDS_SOLID = { sodium: 400, total_sugars: 10, saturated_fat: 4 };
+export const THRESHOLDS_LIQUID = { sodium: 300, total_sugars: 5, saturated_fat: 3 };
+
+// --- תקן 1169 (Israeli adaptation of EU Reg 1169/2011) support ---
+// Israel's labeling reform aligns the nutrition declaration with EU 1169 (the
+// reform's allergen alignment is slated for ~2028) while keeping the Israeli
+// red marks. The 1169 mode adds: dual energy (kJ + kcal), a "% of daily intake"
+// (Reference Intake) column, salt instead of sodium, and emphasised allergens.
+
+// Reference Intakes for an average adult (EU 1169/2011 Annex XIII, Part B).
+export const REFERENCE_INTAKES = {
+  energy_kcal: 2000, energy_kj: 8400,
+  total_fat: 70, saturated_fat: 20,
+  carbohydrates: 260, total_sugars: 90,
+  total_dietary_fiber: 25, protein: 50, salt: 6,
 };
 
-// The current, compliant standard — used as the default.
-export const DEFAULT_STANDARD = 'new';
+// 1 kcal = 4.184 kJ.
+export const KCAL_TO_KJ = 4.184;
 
-// Backwards-compatible aliases (point at the current/new standard).
-export const THRESHOLDS_SOLID = RED_LABEL_STANDARDS.new.solid;
-export const THRESHOLDS_LIQUID = RED_LABEL_STANDARDS.new.liquid;
+// Salt (g) = sodium (g) × 2.5. Sodium is stored in mg, so divide by 1000 first.
+export function saltFromSodiumMg(sodiumMg) {
+  return ((Number(sodiumMg) || 0) / 1000) * 2.5;
+}
+
+// Major allergens to emphasise in the ingredient list under תקן 1169. Israel is
+// aligning its allergen list with EU 1169/2011 Annex II (the 14 allergens).
+// `keywords` are Hebrew substrings used to detect/emphasise an ingredient;
+// `exclude` vetoes false positives (e.g. milk "חלב" must not match the protein
+// word "חלבון"/"חלבונים").
+export const IL_ALLERGENS = [
+  { he: 'גלוטן', keywords: ['גלוטן', 'חיטה', 'קמח', 'שיפון', 'שעורה', 'שיבולת שועל', 'כוסמין', 'סולת', 'בורגול', 'קוסקוס', 'פירורי לחם', 'פתיתים', 'פסטה'] },
+  { he: 'סרטנים', keywords: ['סרטן', 'סרטנים', 'שרימפס', 'חסילון', 'לובסטר'] },
+  { he: 'ביצים', keywords: ['ביצה', 'ביצים', 'חלמון', 'אבקת ביצים'] },
+  { he: 'דגים', keywords: ['דג', 'דגים', 'טונה', 'סלמון', 'אנשובי', 'מקרל', 'סרדין'] },
+  { he: 'בוטנים', keywords: ['בוטן', 'בוטנים'] },
+  { he: 'סויה', keywords: ['סויה', 'טופו', 'אדממה'] },
+  { he: 'חלב', keywords: ['חלב', 'לקטוז', 'גבינה', 'חמאה', 'שמנת', 'יוגורט', 'קזאין', 'מי גבינה'], exclude: ['חלבון', 'חלבונ'] },
+  { he: 'אגוזים', keywords: ['אגוז', 'אגוזים', 'שקד', 'שקדים', 'לוז', 'קשיו', 'פקאן', 'פיסטוק', 'מקדמיה'] },
+  { he: 'סלרי', keywords: ['סלרי'] },
+  { he: 'חרדל', keywords: ['חרדל'] },
+  { he: 'שומשום', keywords: ['שומשום', 'טחינה'] },
+  { he: 'גופרית דו-חמצנית וסולפיטים', keywords: ['סולפיט', 'סולפיטים', 'גופרית', 'מטה-ביסולפיט'] },
+  { he: 'תורמוס', keywords: ['תורמוס'] },
+  { he: 'רכיכות', keywords: ['רכיכה', 'רכיכות', 'צדפה', 'צדפות', 'קלמרי', 'קלמארי', 'תמנון', 'חילזון', 'שבלול'] },
+];
 
 // Operators available in advanced search (Hebrew label -> SQL).
 export const SEARCH_OPERATORS = ['שווה', 'גדול מ', 'קטן מ', 'גדול שווה', 'קטן שווה', 'בין'];

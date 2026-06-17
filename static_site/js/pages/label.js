@@ -9,8 +9,21 @@ import {
 } from '../ui.js';
 import {
   FIELDS_MAPPING, RETENTION_FIELD_MAPPING, NUTRIENT_CATEGORIES, MANDATORY_FIELDS,
-  RED_LABEL_STANDARDS, DEFAULT_STANDARD,
+  THRESHOLDS_SOLID, THRESHOLDS_LIQUID,
+  REFERENCE_INTAKES, KCAL_TO_KJ, saltFromSodiumMg, IL_ALLERGENS,
 } from '../nutrition.js';
+
+// The two labeling standards offered by the designer.
+const STANDARD_META = {
+  '1145': {
+    short: 'תקן 1145',
+    subtitle: 'יצירת תווית מוצר לפי תקן 1145 — סימון תזונתי ישראלי, כולל סימון אדום',
+  },
+  '1169': {
+    short: 'תקן 1169',
+    subtitle: 'יצירת תווית מוצר לפי תקן 1169 (התאמה ישראלית) — כולל סימון אדום, ערך אנרגטי בקי״ג, % מהצריכה היומית והדגשת אלרגנים',
+  },
+};
 import {
   searchFoods, searchRecipes, getFoodDetails, getAvailableUnits,
   getRecipeDetails, getRetentionOptions, getRetentionFactors,
@@ -27,6 +40,7 @@ const LABEL_CSS = `
 .label-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
 .label-title { font-size: 24px; font-weight: bold; margin: 0; }
 .label-marketing { font-style: italic; margin-top: 5px; }
+.label-standard-badge { font-size: 11px; color: #555; margin-top: 4px; }
 .red-labels-container { display: flex; justify-content: center; gap: 15px; margin: 15px 0; }
 .red-label-img { width: 80px; height: auto; }
 .nutrition-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
@@ -49,7 +63,7 @@ const RED_LABEL_IMAGES = {
 // Persisted state (survives tab switches).
 let sourceType = SOURCE_BUILD;
 let labelIngredients = []; // builder ingredients
-let standard = DEFAULT_STANDARD; // 'new' (Phase B, compliant) or 'old' (Phase A)
+let standard = '1145'; // '1145' (current Israeli) or '1169' (Israeli-adapted EU)
 const imageDataUrls = {};  // filename -> dataURL (loaded lazily)
 
 function emptyNutrition() {
@@ -155,8 +169,37 @@ function computeBuilderData() {
 
 function render(container) {
   clear(container);
-  container.appendChild(sectionHeader('🏷️ עיצוב תווית למוצר',
-    'יצירת תווית מוצר לפי תקן 1145 כולל סימון אדום'));
+
+  // Header with a subtitle that reflects the chosen standard.
+  const subtitle = h('p', { class: 'subtitle' });
+  container.appendChild(h('div', { class: 'section-header' }, [
+    h('h2', { text: '🏷️ עיצוב תווית למוצר' }),
+    subtitle,
+  ]));
+
+  // Holds the current step-2 recompute fn so the standard toggle can re-render
+  // the preview without rebuilding (and losing) the edited form.
+  let currentRecompute = null;
+  const updateSubtitle = () => { subtitle.textContent = STANDARD_META[standard].subtitle; };
+
+  // Standard toggle: תקן 1145 ↔ תקן 1169.
+  const stdToggle = h('div', { class: 'btn-group' });
+  for (const key of ['1145', '1169']) {
+    const radio = h('input', { type: 'radio', name: 'label-standard' });
+    radio.checked = standard === key;
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      standard = key;
+      updateSubtitle();
+      if (currentRecompute) currentRecompute();
+    });
+    stdToggle.appendChild(h('label', { class: 'checkbox' }, [radio, STANDARD_META[key].short]));
+  }
+  container.appendChild(h('div', { class: 'panel' }, [
+    h('span', { class: 'field-label', text: 'תקן הסימון:' }),
+    stdToggle,
+  ]));
+  updateSubtitle();
 
   // labelData is recomputed from the active source; the Step-2 form reads its
   // defaults from it.
@@ -414,22 +457,12 @@ function render(container) {
     const ingredientsField = h('textarea', { class: 'text-input', rows: '3' });
     ingredientsField.value = labelData.ingredients || '';
 
-    // Red-label standard selector (old Phase A 2020 / new Phase B 2021+).
-    const standardSel = selectField('תקן סימון אדום:', [
-      { value: 'new', label: RED_LABEL_STANDARDS.new.name },
-      { value: 'old', label: RED_LABEL_STANDARDS.old.name },
-    ], { value: standard });
-    standardSel.select.addEventListener('change', () => { standard = standardSel.select.value; recompute(); });
-
     stepsArea.appendChild(h('div', { class: 'panel' }, [
       h('div', { class: 'row' }, [
         h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'שם מוצר (כפי שיופיע על התווית):' }), nameField]),
         h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'טקסט שיווקי / תיאור:' }), marketing]),
       ]),
-      h('div', { class: 'row tight', style: { margin: '10px 0' } }, [
-        h('label', { class: 'checkbox' }, [isLiquid, 'האם המוצר נוזלי? (משפיע על ספים למדבקות אדומות)']),
-        standardSel.wrapper,
-      ]),
+      h('label', { class: 'checkbox', style: { margin: '10px 0' } }, [isLiquid, 'האם המוצר נוזלי? (משפיע על ספים למדבקות אדומות)']),
       h('label', { class: 'field' }, [h('span', { class: 'field-label', text: 'רשימת רכיבים:' }), ingredientsField]),
     ]));
 
@@ -510,27 +543,26 @@ function render(container) {
       }
       renderComposition(compositionArea, edited, labelData.nutrition, combinedFactor, dispW);
 
-      // Red labels — thresholds depend on the selected standard (old/new) and
-      // whether the product is solid or liquid.
-      const std = RED_LABEL_STANDARDS[standard];
-      const thresholds = liquid ? std.liquid : std.solid;
+      // Red marks — the Israeli warning marks are retained under BOTH standards,
+      // using the current Israeli thresholds (solid vs liquid).
+      const thresholds = liquid ? THRESHOLDS_LIQUID : THRESHOLDS_SOLID;
       const redLabels = [];
       if (edited.sodium > thresholds.sodium) redLabels.push(['נתרן', 'גבוה בנתרן']);
       if (edited.total_sugars > thresholds.total_sugars) redLabels.push(['סוכר', 'גבוה בסוכר']);
       if (edited.saturated_fat > thresholds.saturated_fat) redLabels.push(['שומן רווי', 'גבוה בשומן רווי']);
 
-      // Explain which standard/thresholds produced the marks.
+      // Note: active standard + thresholds + which marks were triggered.
       const unitTxt = liquid ? '100 מ"ל' : '100 גרם';
       const marksTxt = redLabels.length
         ? `סימוני אזהרה: ${redLabels.map((r) => r[1]).join(', ')}`
         : 'אין סימוני אזהרה אדומים';
       clear(redLabelNote);
       redLabelNote.appendChild(statusBox(redLabels.length ? 'warning' : 'success',
-        `${std.short} — ספים ל-${unitTxt}: נתרן ${thresholds.sodium} מ"ג, ` +
+        `${STANDARD_META[standard].short} · ספי סימון אדום ל-${unitTxt}: נתרן ${thresholds.sodium} מ"ג, ` +
         `סוכר ${thresholds.total_sugars} גרם, שומן רווי ${thresholds.saturated_fat} גרם. ${marksTxt}.`));
 
       // Preview.
-      const markup = buildLabelMarkup({
+      const markup = buildLabelMarkup(standard, {
         finalName: nameField.value, marketing: marketing.value, redLabels,
         isLiquid: liquid, edited, ingredients: ingredientsField.value,
         allergens: allergens.value, storage: storage.value,
@@ -541,6 +573,7 @@ function render(container) {
       renderDownload(downloadArea, markup);
     }
 
+    currentRecompute = recompute;
     recompute();
   }
 
@@ -584,15 +617,17 @@ function renderComposition(area, edited, computed, combinedFactor, displayWeight
 }
 
 // ---- label markup (Steps 4/5) ----
-function buildLabelMarkup(s) {
-  const fmtVal = (v) => (Number(v) || 0).toFixed(1);
+function buildLabelMarkup(standardKey, s) {
   const parts = [LABEL_CSS, '<div class="food-label" dir="rtl">'];
 
+  // Header
   parts.push('<div class="label-header">');
   parts.push(`<h1 class="label-title">${escapeHtml(s.finalName)}</h1>`);
   if (s.marketing) parts.push(`<div class="label-marketing">${escapeHtml(s.marketing)}</div>`);
+  parts.push(`<div class="label-standard-badge">לפי תקן ${standardKey === '1169' ? '1169 (התאמה ישראלית)' : '1145'}</div>`);
   parts.push('</div>');
 
+  // Red warning marks — retained under BOTH standards.
   if (s.redLabels.length) {
     parts.push('<div class="red-labels-container">');
     for (const [type, text] of s.redLabels) {
@@ -604,33 +639,23 @@ function buildLabelMarkup(s) {
     parts.push('</div>');
   }
 
-  const unitLabel = s.isLiquid ? 'מל' : 'גרם';
-  parts.push(`<div class="nutrition-header">ערכים תזונתיים ל-100 ${unitLabel}</div>`);
-  parts.push('<table class="nutrition-table">');
-  parts.push(`<thead><tr><th>סימון תזונתי</th><th>ל-100 ${unitLabel}</th></tr></thead><tbody>`);
+  // Nutrition declaration — format depends on the standard.
+  parts.push(standardKey === '1169'
+    ? eu1169TableHtml(s.edited, s.isLiquid)
+    : il1145TableHtml(s.edited, s.isLiquid));
 
-  const e = s.edited;
-  parts.push(`<tr><td>אנרגיה (קלוריות)</td><td>${Math.trunc(e.food_energy || 0)}</td></tr>`);
-  parts.push(`<tr><td>סך השומנים (גרם)</td><td>${fmtVal(e.total_fat)}</td></tr>`);
-  parts.push(`<tr><td style='padding-right: 20px;'>מתוכם: חומצות שומן רוויות (גרם)</td><td>${fmtVal(e.saturated_fat)}</td></tr>`);
+  // Ingredients — under 1169, emphasise (bold) allergen ingredients.
+  const allergenInfo = standardKey === '1169' ? detectAllergens(s.ingredients) : null;
+  const ingredientsHtml = allergenInfo ? allergenInfo.html : escapeHtml(s.ingredients);
+  parts.push(`<div class="ingredients-section"><strong>רכיבים:</strong> ${ingredientsHtml}</div>`);
 
-  const trans = Number(e.trans_fatty_acids) || 0;
-  const transStr = (trans < 0.5 && trans > 0) ? '< 0.5' : fmtVal(trans);
-  parts.push(`<tr><td style='padding-right: 20px;'>חומצות שומן טרנס (גרם)</td><td>${transStr}</td></tr>`);
-  parts.push(`<tr><td style='padding-right: 20px;'>כולסטרול (מ"ג)</td><td>${fmtVal(e.cholesterol)}</td></tr>`);
-  parts.push(`<tr><td>נתרן (מ"ג)</td><td>${fmtVal(e.sodium)}</td></tr>`);
-  parts.push(`<tr><td>סך הפחמימות (גרם)</td><td>${fmtVal(e.carbohydrates)}</td></tr>`);
-
-  const sugs = Number(e.total_sugars) || 0;
-  parts.push(`<tr><td style='padding-right: 20px;'>מתוכן: סוכרים (גרם)</td><td>${fmtVal(sugs)}</td></tr>`);
-  parts.push(`<tr><td style='padding-right: 20px;'>כפיות סוכר</td><td>${fmtVal(sugs / 4)}</td></tr>`);
-  parts.push(`<tr><td>סיבים תזונתיים (גרם)</td><td>${fmtVal(e.total_dietary_fiber)}</td></tr>`);
-  parts.push(`<tr><td>חלבונים (גרם)</td><td>${fmtVal(e.protein)}</td></tr>`);
-  parts.push('</tbody></table>');
-
-  parts.push(`<div class="ingredients-section"><strong>רכיבים:</strong> ${escapeHtml(s.ingredients)}</div>`);
+  // "Contains" line: auto-detected allergens (1169) + any manual note.
+  if (allergenInfo && allergenInfo.found.length) {
+    parts.push(`<div class="allergens-box">מכיל: ${escapeHtml(allergenInfo.found.join(', '))}.</div>`);
+  }
   if (s.allergens) parts.push(`<div class="allergens-box">${escapeHtml(s.allergens)}</div>`);
 
+  // Footer
   parts.push('<div class="footer-info">');
   parts.push(`<div><strong>תנאי אחסון:</strong> ${escapeHtml(s.storage)}</div>`);
   parts.push(`<div><strong>יצרן:</strong> ${escapeHtml(s.manufacturer)}</div>`);
@@ -639,6 +664,77 @@ function buildLabelMarkup(s) {
 
   parts.push('</div>');
   return parts.join('');
+}
+
+// Current Israeli (תקן 1145) nutrition table: kcal, sodium (mg), sugar
+// teaspoons, trans fat, cholesterol, fibre.
+function il1145TableHtml(e, isLiquid) {
+  const fmtVal = (v) => (Number(v) || 0).toFixed(1);
+  const unitLabel = isLiquid ? 'מל' : 'גרם';
+  const sugs = Number(e.total_sugars) || 0;
+  const trans = Number(e.trans_fatty_acids) || 0;
+  const transStr = (trans < 0.5 && trans > 0) ? '< 0.5' : fmtVal(trans);
+  const rows = [
+    `<tr><td>אנרגיה (קלוריות)</td><td>${Math.trunc(e.food_energy || 0)}</td></tr>`,
+    `<tr><td>סך השומנים (גרם)</td><td>${fmtVal(e.total_fat)}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>מתוכם: חומצות שומן רוויות (גרם)</td><td>${fmtVal(e.saturated_fat)}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>חומצות שומן טרנס (גרם)</td><td>${transStr}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>כולסטרול (מ"ג)</td><td>${fmtVal(e.cholesterol)}</td></tr>`,
+    `<tr><td>נתרן (מ"ג)</td><td>${fmtVal(e.sodium)}</td></tr>`,
+    `<tr><td>סך הפחמימות (גרם)</td><td>${fmtVal(e.carbohydrates)}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>מתוכן: סוכרים (גרם)</td><td>${fmtVal(sugs)}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>כפיות סוכר</td><td>${fmtVal(sugs / 4)}</td></tr>`,
+    `<tr><td>סיבים תזונתיים (גרם)</td><td>${fmtVal(e.total_dietary_fiber)}</td></tr>`,
+    `<tr><td>חלבונים (גרם)</td><td>${fmtVal(e.protein)}</td></tr>`,
+  ];
+  return `<div class="nutrition-header">ערכים תזונתיים ל-100 ${unitLabel}</div>`
+    + `<table class="nutrition-table"><thead><tr><th>סימון תזונתי</th><th>ל-100 ${unitLabel}</th></tr></thead>`
+    + `<tbody>${rows.join('')}</tbody></table>`;
+}
+
+// Israeli-adapted EU 1169 nutrition declaration: dual energy (kJ + kcal), salt
+// (from sodium), and a "% of reference intake" column. Order per EU Annex XV.
+function eu1169TableHtml(e, isLiquid) {
+  const unitLabel = isLiquid ? 'מ"ל' : 'גרם';
+  const g = (v) => (Number(v) || 0).toFixed(1);
+  const kcal = Math.round(Number(e.food_energy) || 0);
+  const kj = Math.round(kcal * KCAL_TO_KJ);
+  const salt = saltFromSodiumMg(e.sodium);
+  const RI = REFERENCE_INTAKES;
+  const pct = (val, ref) => (ref > 0 ? `${Math.round((val / ref) * 100)}%` : '—');
+  const rows = [
+    `<tr><td>אנרגיה</td><td>${kj} קי"ג / ${kcal} קק"ל</td><td>${pct(kcal, RI.energy_kcal)}</td></tr>`,
+    `<tr><td>שומנים</td><td>${g(e.total_fat)} גרם</td><td>${pct(Number(e.total_fat) || 0, RI.total_fat)}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>מתוכן: חומצות שומן רוויות</td><td>${g(e.saturated_fat)} גרם</td><td>${pct(Number(e.saturated_fat) || 0, RI.saturated_fat)}</td></tr>`,
+    `<tr><td>פחמימות</td><td>${g(e.carbohydrates)} גרם</td><td>${pct(Number(e.carbohydrates) || 0, RI.carbohydrates)}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>מתוכן: סוכרים</td><td>${g(e.total_sugars)} גרם</td><td>${pct(Number(e.total_sugars) || 0, RI.total_sugars)}</td></tr>`,
+    `<tr><td style='padding-right: 20px;'>סיבים תזונתיים</td><td>${g(e.total_dietary_fiber)} גרם</td><td>${pct(Number(e.total_dietary_fiber) || 0, RI.total_dietary_fiber)}</td></tr>`,
+    `<tr><td>חלבונים</td><td>${g(e.protein)} גרם</td><td>${pct(Number(e.protein) || 0, RI.protein)}</td></tr>`,
+    `<tr><td>מלח</td><td>${salt.toFixed(2)} גרם</td><td>${pct(salt, RI.salt)}</td></tr>`,
+  ];
+  return `<div class="nutrition-header">ערכים תזונתיים ל-100 ${unitLabel}</div>`
+    + `<table class="nutrition-table"><thead><tr><th>רכיב תזונתי</th><th>ל-100 ${unitLabel}</th><th>% מהצריכה*</th></tr></thead>`
+    + `<tbody>${rows.join('')}</tbody></table>`
+    + `<div style="font-size:11px;color:#555;margin-top:4px;">* מבוסס על צריכה יומית מומלצת למבוגר ממוצע (8,400 קי"ג / 2,000 קק"ל). נתרן: ${Math.round(Number(e.sodium) || 0)} מ"ג.</div>`;
+}
+
+// Detect & emphasise allergens (תקן 1169). Splits ingredients on commas, bolds
+// any token containing an allergen keyword (respecting per-allergen excludes),
+// and returns the detected allergen names for the "מכיל" line.
+function detectAllergens(text) {
+  const raw = String(text || '');
+  if (!raw.trim()) return { html: '', found: [] };
+  const found = new Set();
+  const html = raw.split(',').map((tok) => {
+    let hit = false;
+    for (const a of IL_ALLERGENS) {
+      if (a.exclude && a.exclude.some((x) => tok.includes(x))) continue;
+      if (a.keywords.some((k) => tok.includes(k))) { hit = true; found.add(a.he); }
+    }
+    const esc = escapeHtml(tok);
+    return hit ? `<strong>${esc}</strong>` : esc;
+  }).join(',');
+  return { html, found: [...found] };
 }
 
 function renderDownload(area, labelHtml) {

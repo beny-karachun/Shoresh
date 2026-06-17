@@ -71,7 +71,7 @@ The same six modes, as tabs across the top:
 | Comparison | השוואת מוצרים | Side-by-side nutrient comparison of several products |
 | Daily calculator | מחשבון יומי | Sum nutrients across a day's foods |
 | Recipe calculator | מחשבון מתכונים | Recipe ingredients, liquid loss, finished-product per-100g |
-| Label designer | עיצוב תווית | Build a label incl. red ("high in…") marks; old/new standard toggle |
+| Label designer | עיצוב תווית | Build a label with red marks; toggle תקן 1145 ↔ 1169 (Israeli-adapted EU) |
 
 ### Significant-figures fidelity
 
@@ -129,19 +129,33 @@ site is plain ES modules plus the vendored sql.js.
 - The downloadable label HTML embeds the red-label images as base64, so the saved
   file is self-contained (matching the original app's behaviour).
 
-### Red-label standard (old / new)
+### Labeling standard toggle — תקן 1145 / 1169
 
-The label designer has a **"תקן סימון אדום"** selector for the Israeli front-of-pack
-warning regulation, which rolled out in two phases with different thresholds
-(per 100 g solid / 100 ml liquid):
+The label designer has a **"תקן הסימון"** toggle at the top, switching the whole
+label between two standards:
 
-| Nutrient | Old — Phase A (2020) solid / liquid | New — Phase B (2021→) solid / liquid |
-|----------|--------------------------------------|---------------------------------------|
-| Sodium (mg)        | 500 / 400  | **400 / 300** |
-| Total sugars (g)   | 13.5 / 5   | **10 / 5** |
-| Saturated fat (g)  | 5 / 3      | **4 / 3** |
+- **תקן 1145** (default) — the current Israeli prepackaged-food labeling standard.
+  Classic Israeli nutrition table: energy in kcal, **sodium (mg)**, sugar
+  teaspoons, trans fat, cholesterol, fibre.
+- **תקן 1169** — the Israeli *adaptation* of EU Reg 1169/2011 (the reform Israel
+  is aligning to, allergens ~2028). It is **not** plain EU 1169: it **keeps the
+  Israeli red warning marks**, and adds the EU-derived elements:
+  - **Dual energy** — kJ + kcal.
+  - **% of Reference Intake** column (EU Annex XIII adult RIs: 8400 kJ/2000 kcal,
+    fat 70 g, saturates 20 g, carbs 260 g, sugars 90 g, fibre 25 g, protein 50 g,
+    salt 6 g).
+  - **Salt** (= sodium × 2.5) instead of sodium; sodium is still shown in the note.
+  - **Allergen emphasis** — ingredients matching the EU/Israeli allergen list are
+    **bolded** and summarised in a `מכיל:` line.
 
-The default is **New (Phase B)** — the current, permanent, compliant thresholds.
-The "Old" mode is provided for reference / re-issuing older labels. The chosen
-standard drives which red warning marks appear; a note under the preview shows the
-active thresholds and which marks were triggered.
+**Red warning marks** (`סימון אדום`) appear under **both** standards, using the
+current Israeli thresholds (per 100 g solid / 100 ml liquid): sodium 400/300 mg,
+total sugars 10/5 g, saturated fat 4/3 g. A note under the preview shows the
+active standard, thresholds, and which marks were triggered.
+
+> Allergen auto-detection is a Hebrew keyword heuristic (with guards, e.g. milk
+> "חלב" won't match the protein word "חלבון"); always review the `מכיל:` line and
+> the manual allergen field for a real product.
+
+Sources: EUR-Lex Reg (EU) 1169/2011 (Annexes II, XIII, XV); legislation.gov.uk
+Annex XIII; he.wikipedia / health.gov.il (Israeli red-label regulation).
