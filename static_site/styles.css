@@ -1,0 +1,327 @@
+/* styles.css — clean RTL Hebrew UI for the nutrition calculator static site. */
+
+:root {
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --border: #e2e8f0;
+  --text: #1a202c;
+  --muted: #64748b;
+  --primary: #2874a6;
+  --primary-dark: #1a5276;
+  --primary-light: #e8f4f8;
+  --accent: #ff4b4b;
+  --success-bg: #e6f4ea;
+  --success-border: #34a853;
+  --info-bg: #e3f2fd;
+  --info-border: #2196f3;
+  --warn-bg: #fff4e5;
+  --warn-border: #ff9800;
+  --error-bg: #fdecea;
+  --error-border: #e53935;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Arial", "Rubik", sans-serif;
+  direction: rtl;
+}
+
+/* ---------- Header / footer ---------- */
+.app-header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  padding: 22px 24px 18px;
+  text-align: center;
+}
+.app-header h1 { margin: 0; font-size: 30px; }
+.app-header .tagline { margin: 6px 0 0; opacity: 0.85; font-size: 14px; }
+
+.app-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 24px 16px 40px;
+}
+
+/* ---------- Tab bar ---------- */
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: var(--shadow);
+}
+.tab-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-family: inherit;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.tab-btn:hover { background: var(--primary-light); color: var(--primary-dark); }
+.tab-btn.active {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ---------- Main layout ---------- */
+.app-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 18px 40px;
+}
+.page { animation: fade 0.2s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.section-header { margin: 4px 0 18px; }
+.section-header h2 { margin: 0; font-size: 23px; color: var(--primary-dark); }
+.section-header .subtitle { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+h3.block-title { font-size: 18px; margin: 22px 0 10px; color: var(--text); }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+}
+
+.row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.row > * { flex: 1 1 0; min-width: 140px; }
+.row.tight { align-items: center; }
+
+/* ---------- Form fields ---------- */
+.field { display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+.field-label { color: var(--muted); font-weight: 500; }
+.num-input, .select-input, .search-input, .text-input, textarea.text-input {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  width: 100%;
+}
+.num-input:focus, .select-input:focus, .search-input:focus, .text-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(40, 116, 166, 0.12);
+}
+textarea.text-input { resize: vertical; min-height: 70px; }
+
+label.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+label.checkbox input { width: 16px; height: 16px; accent-color: var(--primary); }
+
+/* ---------- Buttons ---------- */
+button.btn {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+button.btn:hover { background: #f1f5f9; }
+button.btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+button.btn.primary:hover { background: var(--primary-dark); }
+button.btn.danger { color: var(--error-border); border-color: #f3c9c5; }
+button.btn.danger:hover { background: var(--error-bg); }
+button.btn.small { padding: 5px 10px; font-size: 13px; }
+button.btn.icon { padding: 6px 10px; }
+
+/* ---------- Status boxes ---------- */
+.status {
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 14px;
+  margin: 10px 0;
+  border: 1px solid;
+}
+.status-info { background: var(--info-bg); border-color: var(--info-border); color: #0d47a1; }
+.status-success { background: var(--success-bg); border-color: var(--success-border); color: #1b5e20; }
+.status-warning { background: var(--warn-bg); border-color: var(--warn-border); color: #8a5300; }
+.status-error { background: var(--error-bg); border-color: var(--error-border); color: #8a1c14; }
+
+/* ---------- Metrics ---------- */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.metric {
+  background: var(--primary-light);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  text-align: center;
+}
+.metric .metric-label { color: var(--primary-dark); font-size: 13px; }
+.metric .metric-value { font-size: 26px; font-weight: 700; color: var(--text); margin-top: 4px; }
+
+/* ---------- Search select ---------- */
+.search-select { position: relative; }
+.search-results {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 30;
+}
+.search-results.hidden { display: none; }
+.search-option { padding: 9px 12px; cursor: pointer; font-size: 14px; }
+.search-option:hover { background: var(--primary-light); }
+.search-empty { padding: 10px 12px; color: var(--muted); font-size: 14px; }
+
+/* ---------- Data tables ---------- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: #fff;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.data-table th, .data-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 9px 12px;
+  text-align: right;
+}
+.data-table th { background: var(--primary-light); color: var(--primary-dark); font-weight: 600; }
+.data-table tbody tr:hover { background: #f8fafc; }
+.data-table.scroll-wrap { display: block; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+
+/* ---------- Expander / details ---------- */
+.expander {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 8px 0;
+  background: #fff;
+  overflow: hidden;
+}
+.expander > summary {
+  cursor: pointer;
+  padding: 11px 14px;
+  font-weight: 600;
+  background: #f8fafc;
+  list-style: none;
+}
+.expander > summary::-webkit-details-marker { display: none; }
+.expander > summary::before { content: "▸ "; color: var(--primary); }
+.expander[open] > summary::before { content: "▾ "; }
+.expander-body { padding: 12px 14px; }
+
+.nutri-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 24px; }
+.nutri-cols .nut-line { font-size: 14px; padding: 2px 0; }
+.nutri-cols .nut-line b { color: var(--primary-dark); }
+
+/* divider */
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+.muted { color: var(--muted); font-size: 13px; }
+.caption { color: var(--muted); font-size: 13px; margin: 4px 0; }
+.pill {
+  display: inline-block; background: var(--primary-light); color: var(--primary-dark);
+  border-radius: 999px; padding: 3px 10px; font-size: 12px; margin-inline-start: 6px;
+}
+
+/* list rows (comparison / daily / label ingredients) */
+.list-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; margin: 6px 0;
+}
+.list-row .grow { flex: 1; }
+.list-row .meta { color: var(--muted); font-size: 13px; }
+.inline-form {
+  border: 1px dashed var(--primary);
+  border-radius: 8px; padding: 12px; margin: 6px 0 12px; background: #fbfdff;
+}
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Nutrient composition grid (label page) ---------- */
+.nutrient-table-container { direction: rtl; font-family: Arial, sans-serif; font-size: 12px; }
+.nutrient-category {
+  background-color: var(--primary-light); font-weight: bold; padding: 6px 8px;
+  margin-top: 8px; border-radius: 4px; color: var(--primary-dark);
+}
+.nutrient-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 0; }
+.nutrient-item {
+  background-color: #f9f9f9; padding: 4px 6px; border-radius: 3px;
+  display: flex; justify-content: space-between; border: 1px solid #eee;
+}
+.nutrient-name { color: #333; }
+.nutrient-value { color: #2874a6; font-weight: 500; }
+@media (max-width: 640px) { .nutrient-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---------- Loading ---------- */
+.loading { text-align: center; padding: 80px 20px; color: var(--muted); }
+.spinner {
+  width: 42px; height: 42px; margin: 0 auto 16px;
+  border: 4px solid var(--border); border-top-color: var(--primary);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Food label preview (page 6) ---------- */
+.label-preview-wrap { display: flex; justify-content: center; }
+.food-label {
+  border: 2px solid #000; padding: 20px; background: white; color: black;
+  font-family: Arial, sans-serif; direction: rtl; text-align: right;
+  max-width: 500px; width: 100%; margin: 0 auto; box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.1);
+}
+.food-label .label-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+.food-label .label-title { font-size: 24px; font-weight: bold; margin: 0; }
+.food-label .label-marketing { font-style: italic; margin-top: 5px; }
+.food-label .red-labels-container { display: flex; justify-content: center; gap: 15px; margin: 15px 0; }
+.food-label .red-label-img { width: 80px; height: auto; }
+.food-label .nutrition-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+.food-label .nutrition-table th, .food-label .nutrition-table td { border-bottom: 1px solid #ddd; padding: 4px; text-align: right; }
+.food-label .nutrition-table th { font-weight: bold; }
+.food-label .nutrition-header { background-color: #f5f5f5; font-weight: bold; padding: 5px; margin-top: 10px; border: 1px solid #ddd; }
+.food-label .ingredients-section { margin-top: 15px; font-size: 13px; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; }
+.food-label .footer-info { margin-top: 15px; font-size: 12px; border-top: 1px solid #000; padding-top: 10px; }
+.food-label .allergens-box { border: 1px solid #000; padding: 5px; margin-top: 10px; font-weight: bold; font-size: 13px; }
+.food-label .red-fallback { color: red; font-weight: bold; border: 1px solid red; padding: 5px; }
+
+.hidden { display: none !important; }
