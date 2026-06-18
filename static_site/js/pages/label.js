@@ -9,8 +9,7 @@ import {
 } from '../ui.js';
 import {
   FIELDS_MAPPING, RETENTION_FIELD_MAPPING, NUTRIENT_CATEGORIES, MANDATORY_FIELDS,
-  THRESHOLDS_SOLID, THRESHOLDS_LIQUID,
-  REFERENCE_INTAKES, KCAL_TO_KJ, saltFromSodiumMg, IL_ALLERGENS,
+  THRESHOLDS_SOLID, THRESHOLDS_LIQUID, IL_ALLERGENS,
 } from '../nutrition.js';
 
 // The two labeling standards offered by the designer.
@@ -28,29 +27,15 @@ import {
   searchFoods, searchRecipes, getFoodDetails, getAvailableUnits,
   getRecipeDetails, getRetentionOptions, getRetentionFactors,
 } from '../db.js';
+import { buildLabelSvg, fitSvgHeight } from '../label/svg.js';
+import { exportPng, exportPdf, printLabel, exportSvg } from '../label/export.js';
+import {
+  WIDTH_PRESETS, TEMPLATES, DEFAULT_LABEL_SPEC, clampWidthMm,
+} from '../label/spec.js';
 
 const SOURCE_RECIPE = 'מתכון קיים';
 const SOURCE_MANUAL = 'הזנה ידנית';
 const SOURCE_BUILD = '(מומלץ) צור מתכון ממוצרים במאגר';
-
-// Inline CSS for the label, so the downloadable HTML file is self-contained.
-const LABEL_CSS = `
-<style>
-.food-label { border: 2px solid #000; padding: 20px; background: white; color: black; font-family: 'Arial', sans-serif; direction: rtl; text-align: right; max-width: 500px; margin: 0 auto; box-shadow: 5px 5px 15px rgba(0,0,0,0.1); }
-.label-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
-.label-title { font-size: 24px; font-weight: bold; margin: 0; }
-.label-marketing { font-style: italic; margin-top: 5px; }
-.red-labels-container { display: flex; justify-content: center; gap: 15px; margin: 15px 0; }
-.red-label-img { width: 80px; height: auto; }
-.nutrition-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-.nutrition-table th, .nutrition-table td { border-bottom: 1px solid #ddd; padding: 4px; text-align: right; }
-.nutrition-table th { font-weight: bold; }
-.nutrition-header { background-color: #f5f5f5; font-weight: bold; padding: 5px; margin-top: 10px; border: 1px solid #ddd; }
-.ingredients-section { margin-top: 15px; font-size: 13px; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; }
-.footer-info { margin-top: 15px; font-size: 12px; border-top: 1px solid #000; padding-top: 10px; }
-.allergens-box { border: 1px solid #000; padding: 5px; margin-top: 10px; font-weight: bold; font-size: 13px; }
-.red-fallback { color: red; font-weight: bold; border: 1px solid red; padding: 5px; }
-</style>`;
 
 // Red-label image filenames (matching the originals, including the typo).
 const RED_LABEL_IMAGES = {
@@ -63,6 +48,7 @@ const RED_LABEL_IMAGES = {
 let sourceType = SOURCE_BUILD;
 let labelIngredients = []; // builder ingredients
 let standard = '1145'; // '1145' (current Israeli) or '1169' (Israeli-adapted EU)
+let labelSpec = { ...DEFAULT_LABEL_SPEC }; // physical width (mm) + density variant
 const imageDataUrls = {};  // filename -> dataURL (loaded lazily)
 
 function emptyNutrition() {
@@ -575,6 +561,33 @@ function render(container) {
     // Step 4/5 — preview
     stepsArea.appendChild(h('hr', { class: 'divider' }));
     stepsArea.appendChild(h('h3', { class: 'block-title', text: '4. תצוגה מקדימה' }));
+
+    // Physical size + density controls (the height flows to fit the content).
+    const presetId = WIDTH_PRESETS.find((p) => p.widthMm === labelSpec.widthMm)?.id || 'custom';
+    const widthSel = selectField('רוחב התווית',
+      WIDTH_PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: presetId });
+    const customWidth = numberField('רוחב מותאם (מ"מ)', { value: labelSpec.widthMm, min: 40, max: 200, step: 1 });
+    customWidth.wrapper.classList.toggle('hidden', presetId !== 'custom');
+    const variantSel = selectField('סגנון עיצוב',
+      TEMPLATES.map((v) => ({ value: v.id, label: v.label })), { value: labelSpec.variant });
+
+    widthSel.select.addEventListener('change', () => {
+      const preset = WIDTH_PRESETS.find((p) => p.id === widthSel.select.value);
+      const isCustom = !preset || preset.widthMm === null;
+      customWidth.wrapper.classList.toggle('hidden', !isCustom);
+      labelSpec.widthMm = isCustom ? clampWidthMm(customWidth.input.value) : preset.widthMm;
+      recompute();
+    });
+    customWidth.input.addEventListener('input', () => {
+      labelSpec.widthMm = clampWidthMm(customWidth.input.value);
+      recompute();
+    });
+    variantSel.select.addEventListener('change', () => {
+      labelSpec.variant = variantSel.select.value;
+      recompute();
+    });
+    stepsArea.appendChild(h('div', { class: 'row tight' }, [widthSel.wrapper, customWidth.wrapper, variantSel.wrapper]));
+
     const redLabelNote = h('div', {});
     stepsArea.appendChild(redLabelNote);
     const previewArea = h('div', { class: 'label-preview-wrap' });
@@ -632,16 +645,27 @@ function render(container) {
         ? [...new Set(ingredientItems.flatMap((it) => allergensInName(it.name)))]
         : [];
 
-      // Preview.
-      const markup = buildLabelMarkup(standard, {
+      // Resolve red-mark image sources (data URL if preloaded, else relative path).
+      const redLabelImageSrcs = {};
+      for (const [type] of redLabels) {
+        const file = RED_LABEL_IMAGES[type];
+        redLabelImageSrcs[type] = file && imageDataUrls[file]
+          ? imageDataUrls[file] : (file ? `labels/${file}` : null);
+      }
+
+      const labelState = {
         finalName: nameField.value, marketing: marketing.value, redLabels,
         isLiquid: liquid, edited, ingredientsHtml, containsAllergens,
         allergens: allergens.value, storage: storage.value,
-        manufacturer: manufacturer.value, expiry: expiry.value,
-      });
-      previewArea.innerHTML = markup;
+        manufacturer: manufacturer.value, expiry: expiry.value, redLabelImageSrcs,
+      };
 
-      renderDownload(downloadArea, markup);
+      // Preview — rendered as an <svg> (the source of truth for all exports).
+      const svg = buildLabelSvg(standard, labelState, labelSpec);
+      previewArea.replaceChildren(svg);
+      fitSvgHeight(svg);
+
+      renderExportToolbar(downloadArea, svg, nameField.value);
     }
 
     currentRecompute = recompute;
@@ -687,105 +711,6 @@ function renderComposition(area, edited, computed, combinedFactor, displayWeight
   area.appendChild(wrap);
 }
 
-// ---- label markup (Steps 4/5) ----
-function buildLabelMarkup(standardKey, s) {
-  const parts = [LABEL_CSS, '<div class="food-label" dir="rtl">'];
-
-  // Header
-  parts.push('<div class="label-header">');
-  parts.push(`<h1 class="label-title">${escapeHtml(s.finalName)}</h1>`);
-  if (s.marketing) parts.push(`<div class="label-marketing">${escapeHtml(s.marketing)}</div>`);
-  parts.push('</div>');
-
-  // Red warning marks — retained under BOTH standards.
-  if (s.redLabels.length) {
-    parts.push('<div class="red-labels-container">');
-    for (const [type, text] of s.redLabels) {
-      const file = RED_LABEL_IMAGES[type];
-      const src = file && imageDataUrls[file] ? imageDataUrls[file] : (file ? `labels/${file}` : null);
-      if (src) parts.push(`<img src="${src}" class="red-label-img" alt="${text}">`);
-      else parts.push(`<div class="red-fallback">${text}</div>`);
-    }
-    parts.push('</div>');
-  }
-
-  // Nutrition declaration — format depends on the standard.
-  parts.push(standardKey === '1169'
-    ? eu1169TableHtml(s.edited, s.isLiquid)
-    : il1145TableHtml(s.edited, s.isLiquid));
-
-  // Ingredients — pre-rendered with per-chip manual bold highlighting.
-  parts.push(`<div class="ingredients-section"><strong>רכיבים:</strong> ${s.ingredientsHtml || ''}</div>`);
-
-  // "Contains" line: auto-detected allergens (1169) + any manual note.
-  if (s.containsAllergens && s.containsAllergens.length) {
-    parts.push(`<div class="allergens-box">מכיל: ${escapeHtml(s.containsAllergens.join(', '))}.</div>`);
-  }
-  if (s.allergens) parts.push(`<div class="allergens-box">${escapeHtml(s.allergens)}</div>`);
-
-  // Footer
-  parts.push('<div class="footer-info">');
-  parts.push(`<div><strong>תנאי אחסון:</strong> ${escapeHtml(s.storage)}</div>`);
-  parts.push(`<div><strong>יצרן:</strong> ${escapeHtml(s.manufacturer)}</div>`);
-  parts.push(`<div><strong>תוקף:</strong> ${escapeHtml(s.expiry)}</div>`);
-  parts.push('</div>');
-
-  parts.push('</div>');
-  return parts.join('');
-}
-
-// Current Israeli (תקן 1145) nutrition table: kcal, sodium (mg), sugar
-// teaspoons, trans fat, cholesterol, fibre.
-function il1145TableHtml(e, isLiquid) {
-  const fmtVal = (v) => (Number(v) || 0).toFixed(1);
-  const unitLabel = isLiquid ? 'מל' : 'גרם';
-  const sugs = Number(e.total_sugars) || 0;
-  const trans = Number(e.trans_fatty_acids) || 0;
-  const transStr = (trans < 0.5 && trans > 0) ? '< 0.5' : fmtVal(trans);
-  const rows = [
-    `<tr><td>אנרגיה (קלוריות)</td><td>${Math.trunc(e.food_energy || 0)}</td></tr>`,
-    `<tr><td>סך השומנים (גרם)</td><td>${fmtVal(e.total_fat)}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>מתוכם: חומצות שומן רוויות (גרם)</td><td>${fmtVal(e.saturated_fat)}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>חומצות שומן טרנס (גרם)</td><td>${transStr}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>כולסטרול (מ"ג)</td><td>${fmtVal(e.cholesterol)}</td></tr>`,
-    `<tr><td>נתרן (מ"ג)</td><td>${fmtVal(e.sodium)}</td></tr>`,
-    `<tr><td>סך הפחמימות (גרם)</td><td>${fmtVal(e.carbohydrates)}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>מתוכן: סוכרים (גרם)</td><td>${fmtVal(sugs)}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>כפיות סוכר</td><td>${fmtVal(sugs / 4)}</td></tr>`,
-    `<tr><td>סיבים תזונתיים (גרם)</td><td>${fmtVal(e.total_dietary_fiber)}</td></tr>`,
-    `<tr><td>חלבונים (גרם)</td><td>${fmtVal(e.protein)}</td></tr>`,
-  ];
-  return `<div class="nutrition-header">ערכים תזונתיים ל-100 ${unitLabel}</div>`
-    + `<table class="nutrition-table"><thead><tr><th>סימון תזונתי</th><th>ל-100 ${unitLabel}</th></tr></thead>`
-    + `<tbody>${rows.join('')}</tbody></table>`;
-}
-
-// Israeli-adapted EU 1169 nutrition declaration: dual energy (kJ + kcal), salt
-// (from sodium), and a "% of reference intake" column. Order per EU Annex XV.
-function eu1169TableHtml(e, isLiquid) {
-  const unitLabel = isLiquid ? 'מ"ל' : 'גרם';
-  const g = (v) => (Number(v) || 0).toFixed(1);
-  const kcal = Math.round(Number(e.food_energy) || 0);
-  const kj = Math.round(kcal * KCAL_TO_KJ);
-  const salt = saltFromSodiumMg(e.sodium);
-  const RI = REFERENCE_INTAKES;
-  const pct = (val, ref) => (ref > 0 ? `${Math.round((val / ref) * 100)}%` : '—');
-  const rows = [
-    `<tr><td>אנרגיה</td><td>${kj} קי"ג / ${kcal} קק"ל</td><td>${pct(kcal, RI.energy_kcal)}</td></tr>`,
-    `<tr><td>שומנים</td><td>${g(e.total_fat)} גרם</td><td>${pct(Number(e.total_fat) || 0, RI.total_fat)}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>מתוכן: חומצות שומן רוויות</td><td>${g(e.saturated_fat)} גרם</td><td>${pct(Number(e.saturated_fat) || 0, RI.saturated_fat)}</td></tr>`,
-    `<tr><td>פחמימות</td><td>${g(e.carbohydrates)} גרם</td><td>${pct(Number(e.carbohydrates) || 0, RI.carbohydrates)}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>מתוכן: סוכרים</td><td>${g(e.total_sugars)} גרם</td><td>${pct(Number(e.total_sugars) || 0, RI.total_sugars)}</td></tr>`,
-    `<tr><td style='padding-right: 20px;'>סיבים תזונתיים</td><td>${g(e.total_dietary_fiber)} גרם</td><td>${pct(Number(e.total_dietary_fiber) || 0, RI.total_dietary_fiber)}</td></tr>`,
-    `<tr><td>חלבונים</td><td>${g(e.protein)} גרם</td><td>${pct(Number(e.protein) || 0, RI.protein)}</td></tr>`,
-    `<tr><td>מלח</td><td>${salt.toFixed(2)} גרם</td><td>${pct(salt, RI.salt)}</td></tr>`,
-  ];
-  return `<div class="nutrition-header">ערכים תזונתיים ל-100 ${unitLabel}</div>`
-    + `<table class="nutrition-table"><thead><tr><th>רכיב תזונתי</th><th>ל-100 ${unitLabel}</th><th>% מהצריכה*</th></tr></thead>`
-    + `<tbody>${rows.join('')}</tbody></table>`
-    + `<div style="font-size:11px;color:#555;margin-top:4px;">* מבוסס על צריכה יומית מומלצת למבוגר ממוצע (8,400 קי"ג / 2,000 קק"ל). נתרן: ${Math.round(Number(e.sodium) || 0)} מ"ג.</div>`;
-}
-
 // Parse a comma-separated ingredients string into editable chip items.
 function parseIngredients(str) {
   return String(str || '')
@@ -807,36 +732,67 @@ function allergensInName(name) {
   return found;
 }
 
-function renderDownload(area, labelHtml) {
-  clear(area);
-  const fullHtml = `<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <title>תצוגה מקדימה - תווית</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; margin: 0; background: #f5f1e9; }
-        .print-instructions { background: #f3e6dd; border: 1px solid #c15f3c; border-radius: 5px; padding: 10px; margin-bottom: 15px; font-size: 12px; text-align: center; color: #5b4a2e; }
-        @media print { .print-instructions { display: none; } body { background: white; } }
-    </style>
-</head>
-<body>
-    <div class="print-instructions">
-        💡 שנה את גודל החלון כרצונך, ואז לחץ <strong>Ctrl+P</strong> להדפסה או צלם מסך
-    </div>
-    ${labelHtml}
-</body>
-</html>`;
+// Build a safe-ish file name from the product name (falls back to "label").
+function safeFileName(name) {
+  const base = String(name || '').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
+  return base || 'label';
+}
 
-  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = h('a', {
-    href: url, download: 'label_preview.html',
-    class: 'btn primary', text: '🖼️ הורד תווית כקובץ HTML (לפתיחה בחלון נפרד)',
+// Export toolbar (Step 5): print directly, or download a high-res PNG / editable
+// SVG of the current label svg. Rebuilt on each recompute against the latest svg.
+function renderExportToolbar(area, svg, productName) {
+  clear(area);
+  const fname = safeFileName(productName);
+
+  const group = h('div', { class: 'btn-group' });
+
+  const printBtn = h('button', { class: 'btn primary', type: 'button', text: '🖨️ הדפס תווית' });
+  printBtn.addEventListener('click', () => printLabel(svg));
+
+  // PNG with a resolution selector.
+  const dpiSelect = h('select', { class: 'select-input', style: { maxWidth: '170px' } });
+  for (const [val, label] of [['150', '150 DPI — תצוגה'], ['300', '300 DPI — הדפסה'], ['600', '600 DPI — איכות גבוהה']]) {
+    dpiSelect.appendChild(h('option', { value: val, text: label, ...(val === '300' ? { selected: true } : {}) }));
+  }
+  const pngBtn = h('button', { class: 'btn', type: 'button', text: '🖼️ הורד PNG' });
+  pngBtn.addEventListener('click', async () => {
+    pngBtn.disabled = true;
+    const prev = pngBtn.textContent;
+    pngBtn.textContent = '… מכין PNG';
+    try {
+      await exportPng(svg, { dpi: parseInt(dpiSelect.value, 10) || 300, filename: `${fname}.png` });
+    } catch (e) {
+      area.appendChild(statusBox('error', `שגיאה ביצירת PNG: ${e.message}`));
+    } finally {
+      pngBtn.textContent = prev;
+      pngBtn.disabled = false;
+    }
   });
-  area.appendChild(link);
+
+  const pdfBtn = h('button', { class: 'btn', type: 'button', text: '📄 הורד PDF (לבית דפוס)' });
+  pdfBtn.addEventListener('click', async () => {
+    pdfBtn.disabled = true;
+    const prev = pdfBtn.textContent;
+    pdfBtn.textContent = '… מכין PDF';
+    try {
+      await exportPdf(svg, { dpi: Math.max(300, parseInt(dpiSelect.value, 10) || 300), filename: `${fname}.pdf` });
+    } catch (e) {
+      area.appendChild(statusBox('error', `שגיאה ביצירת PDF: ${e.message}`));
+    } finally {
+      pdfBtn.textContent = prev;
+      pdfBtn.disabled = false;
+    }
+  });
+
+  const svgBtn = h('button', { class: 'btn', type: 'button', text: '✏️ הורד SVG (לעריכה)' });
+  svgBtn.addEventListener('click', () => exportSvg(svg, { filename: `${fname}.svg` }));
+
+  group.append(printBtn, pdfBtn, pngBtn, dpiSelect, svgBtn);
+  area.appendChild(group);
   area.appendChild(statusBox('info',
-    '💡 הוראות הדפסה: 1. לחץ על הכפתור "הורד תווית כקובץ HTML". 2. פתח את הקובץ שהורד בדפדפן. 3. שנה את גודל החלון כרצונך. 4. להדפסה: לחץ Ctrl+P או צלם מסך.'));
+    '🖨️ "הדפס תווית" פותח את חלון ההדפסה בגודל התווית המדויק (ייתכן שתצטרך לבחור "ללא שוליים" ולכבות כותרת עליונה/תחתונה). '
+    + '📄 PDF בגודל פיזי מדויק לשליחה לבית דפוס. 🖼️ PNG באיכות גבוהה למעצב או לתצוגה. '
+    + '✏️ SVG הוא קובץ וקטורי הניתן לעריכה באילוסטרייטור / אינקסקייפ.'));
 }
 
 function escapeHtml(str) {
