@@ -815,8 +815,8 @@ function renderDownload(area, labelHtml) {
     <meta charset="UTF-8">
     <title>תצוגה מקדימה - תווית</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; margin: 0; background: #f0f0f0; }
-        .print-instructions { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 5px; padding: 10px; margin-bottom: 15px; font-size: 12px; text-align: center; }
+        body { font-family: Arial, sans-serif; padding: 20px; margin: 0; background: #f5f1e9; }
+        .print-instructions { background: #f3e6dd; border: 1px solid #c15f3c; border-radius: 5px; padding: 10px; margin-bottom: 15px; font-size: 12px; text-align: center; color: #5b4a2e; }
         @media print { .print-instructions { display: none; } body { background: white; } }
     </style>
 </head>
